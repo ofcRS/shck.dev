@@ -11,7 +11,7 @@ Source of [shck.dev](https://shck.dev) — blog + tool changelog, Astro 6, self-
   release: the site rebuilds (changelog updates), and `release-post.yml` opens a PR with a
   scaffolded draft announcement post (edit → `draft: false` → merge to publish).
 - **Deploys** — `deploy.yml`: build with bun → rsync to the server as `deploy` → atomic
-  symlink flip (`/var/www/shck.dev/current` → timestamped release dir, last 5 kept).
+  symlink flip (`/var/www/shck.dev-blog/current` → timestamped release dir, last 5 kept).
   Rollback = re-point the symlink.
 - **Analytics** — self-hosted Umami at `analytics.shck.dev`; the script tag renders only
   when `PUBLIC_UMAMI_WEBSITE_ID` is set (CI repo variable `UMAMI_WEBSITE_ID`).

@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SERVER: 5.78.209.53
-  SITE_ROOT: /var/www/shck.dev
+  SERVER: 46.224.197.82
+  SITE_ROOT: /var/www/shck.dev-blog
 
 jobs:
   deploy:
