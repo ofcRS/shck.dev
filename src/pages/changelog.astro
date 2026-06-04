@@ -1,0 +1,61 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import { TOOLS } from '../site.config';
+
+// One release collection per tool (see content.config.ts) — fetched from
+// github.com/<repo>/releases.atom at build time; a repository_dispatch from each
+// tool repo rebuilds this page on every release. Nothing here is hand-maintained.
+const sections = await Promise.all(
+  TOOLS.map(async (t) => {
+    const entries = (await getCollection(`releases_${t.name}` as any)) as any[];
+    const releases = entries
+      .map((e) => {
+        const d: any = e.data;
+        return {
+          title: d.title ?? e.id,
+          url: d.link ?? d.url ?? `https://github.com/${t.repo}/releases`,
+          date: d.pubdate ?? d.pubDate ?? d.published ?? d.date ?? null,
+          html: d.description ?? d.summary ?? '',
+        };
+      })
+      .sort((a, b) => new Date(b.date ?? 0).valueOf() - new Date(a.date ?? 0).valueOf());
+    return { tool: t, releases };
+  }),
+);
+
+const fmt = (d: string | Date | null) =>
+  d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }) : '';
+---
+
+<Base title="changelog" description="Release history of shck.dev open-source tools — compiled from GitHub releases at build time.">
+  <h1>changelog</h1>
+  <p class="meta">compiled from GitHub releases at build time — always in sync</p>
+  {
+    sections.map(({ tool, releases }) => (
+      <section>
+        <h2>
+          <a href={`https://github.com/${tool.repo}`}>{tool.name}</a>
+        </h2>
+        <p class="meta">{tool.blurb}</p>
+        {releases.length ? (
+          releases.map((r) => (
+            <article class="release">
+              <h3>
+                <a href={r.url}>{r.title}</a> <span class="meta">{fmt(r.date)}</span>
+              </h3>
+              <div class="release-body" set:html={r.html} />
+            </article>
+          ))
+        ) : (
+          <p class="meta">(no releases yet)</p>
+        )}
+      </section>
+    ))
+  }
+</Base>
+
+<style>
+  .release { border-left: 2px solid var(--rule); padding-left: 1rem; margin: 1.25rem 0; }
+  .release-body { font-size: 0.9rem; color: var(--fg); }
+</style>

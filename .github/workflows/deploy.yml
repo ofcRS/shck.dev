@@ -1,0 +1,44 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [tool-release]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  SERVER: 5.78.209.53
+  SITE_ROOT: /var/www/shck.dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install + build
+        env:
+          PUBLIC_UMAMI_WEBSITE_ID: ${{ vars.UMAMI_WEBSITE_ID }}
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Rsync release + atomic symlink flip
+        run: |
+          mkdir -p ~/.ssh && ssh-keyscan -H "$SERVER" >> ~/.ssh/known_hosts
+          REL="releases/$(date -u +%Y%m%dT%H%M%S)"
+          rsync -az --delete dist/ "deploy@$SERVER:$SITE_ROOT/$REL/"
+          ssh "deploy@$SERVER" "cd $SITE_ROOT \
+            && ln -sfn $REL current.tmp && mv -T current.tmp current \
+            && ls -1dt releases/* | tail -n +6 | xargs -r rm -rf"

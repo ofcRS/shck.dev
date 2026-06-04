@@ -1,0 +1,65 @@
+# On repository_dispatch(tool-release) from a tool repo: open a PR with a scaffolded
+# draft announcement post. The deploy workflow runs on the same event, so /changelog
+# updates immediately even if this PR is never merged. Requires repo setting:
+# Settings → Actions → "Allow GitHub Actions to create and approve pull requests".
+name: release-post
+
+on:
+  repository_dispatch:
+    types: [tool-release]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  draft-post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scaffold draft post
+        env:
+          TOOL: ${{ github.event.client_payload.tool }}
+          TAG: ${{ github.event.client_payload.tag }}
+          TITLE: ${{ github.event.client_payload.name }}
+          URL: ${{ github.event.client_payload.url }}
+          BODY: ${{ github.event.client_payload.body }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          SLUG="${TOOL}-${TAG//./-}"
+          FILE="src/content/posts/${SLUG}.md"
+          {
+            echo "---"
+            echo "title: '${TOOL} ${TAG}'"
+            echo "description: '${TITLE//\'/''} — release notes.'"
+            echo "date: ${DATE}"
+            echo "tags: ['${TOOL}', 'release']"
+            echo "tool: '${TOOL}'"
+            echo "draft: true"
+            echo "---"
+            echo
+            echo "**[${TITLE}](${URL})** is out."
+            echo
+            echo "${BODY}"
+            echo
+            echo "<!-- draft: edit me, set draft: false, merge to publish -->"
+          } > "$FILE"
+          echo "file=$FILE" >> "$GITHUB_ENV"
+          echo "slug=$SLUG" >> "$GITHUB_ENV"
+
+      - name: Open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="release-post/${slug}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add "$file"
+          git commit -m "draft post: ${slug}"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --title "Draft post: ${slug}" \
+            --body "Auto-scaffolded from the ${slug} release. Edit, set \`draft: false\`, merge to publish. /changelog already shows this release without this PR." \
+            --base main --head "$BRANCH"

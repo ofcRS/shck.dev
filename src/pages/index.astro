@@ -1,0 +1,85 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import { TOOLS } from '../site.config';
+
+const posts = (await getCollection('posts', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, 5);
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' });
+---
+
+<Base>
+  <section class="hero">
+    <h1 class="hero-title">shck<span>.dev</span><span class="cursor"></span></h1>
+    <p class="tagline">open-source tools</p>
+  </section>
+
+  <section>
+    <h2>tools</h2>
+    <ul class="tool-list">
+      {
+        TOOLS.map((t) => (
+          <li>
+            <a href={`https://github.com/${t.repo}`}>{t.name}</a>
+            <span class="blurb"> — {t.blurb}</span>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section>
+    <h2>recent posts</h2>
+    {
+      posts.length ? (
+        <ul class="post-list">
+          {posts.map((p) => (
+            <li>
+              <a href={`/posts/${p.id}/`}>{p.data.title}</a>
+              <time datetime={p.data.date.toISOString()}>{fmt(p.data.date)}</time>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="meta">(no posts yet)</p>
+      )
+    }
+    <p class="meta" style="margin-top: 1rem;">
+      <a href="/posts/">all posts</a> · <a href="/changelog/">tool changelog</a>
+    </p>
+  </section>
+</Base>
+
+<style>
+  .hero { text-align: center; padding: 3.5rem 0 2.5rem; }
+  .hero-title {
+    font-size: clamp(2rem, 6vw, 4rem);
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    color: #fff;
+    margin: 0 0 0.5rem;
+  }
+  .hero-title span { color: var(--accent); }
+  .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--accent);
+    margin-left: 0.1em;
+    vertical-align: text-bottom;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .tagline {
+    font-size: 0.9rem;
+    color: var(--dim);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+  }
+  .tool-list { list-style: none; padding: 0; }
+  .tool-list li { padding: 0.4rem 0; }
+  .blurb { color: var(--dim); font-size: 0.9rem; }
+</style>
