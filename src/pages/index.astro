@@ -53,16 +53,17 @@ const buildDate = new Date().toISOString().slice(0, 10);
 ---
 
 <Base>
-  <h1>shck.dev <span class="dim">/ open-source developer tools</span></h1>
-  <p class="intro">Tools built in public — <b>release-fed changelogs</b>, write-ups when things ship.</p>
+  <h1>shck.dev <span class="dim">/ I build developer tools</span></h1>
+  <p class="intro">
+    I'm Aleksandr. I build small developer tools — right now <b>ccx</b> (context for Claude
+    Code) and <b>notion-mcp</b> (Notion over MCP).
+  </p>
   <div class="stats">
     <span><b>{TOOLS.length}</b> {TOOLS.length === 1 ? 'tool' : 'tools'}</span>
     <span><b>{postCount}</b> {postCount === 1 ? 'post' : 'posts'}</span>
     {latest && <span>latest: <b>{latest.label}</b></span>}
     <span>{buildDate}</span>
   </div>
-  <p class="srcline">changelog compiled from GitHub releases at build time · nothing hand-maintained</p>
-
   <h2>tools</h2>
   {
     tools.map(({ tool: t, latest: rel }) => (
@@ -100,10 +101,6 @@ const buildDate = new Date().toISOString().slice(0, 10);
     )
   }
 
-  <span slot="foot">
-    © {new Date().getFullYear()} shck · <a href="https://github.com/ofcRS">github</a> ·
-    <a href="/rss.xml">rss</a> — changelog is release-fed; nothing hand-maintained.
-  </span>
 </Base>
 
 <style>

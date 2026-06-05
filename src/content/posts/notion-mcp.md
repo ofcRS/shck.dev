@@ -1,14 +1,15 @@
 ---
-title: 'notion-mcp — Notion over MCP, no OAuth required'
-description: 'MCP server for Notion using the internal API: full-text search, markdown export and import — no workspace admin, no OAuth, just your browser cookie.'
+title: 'notion-mcp: Notion over MCP, without OAuth'
+description: 'MCP server for Notion built on the internal API. Full-text search, plus markdown export and import. No workspace admin and no OAuth — it uses your browser cookie.'
 date: 2026-06-05
 tags: ['notion', 'mcp', 'release']
 tool: 'notion-mcp'
 ---
 
-**notion-mcp** talks to Notion's internal API — the same one the web app uses — and exposes it
-over MCP: full-text search, page export to markdown, and markdown import back in. No workspace
-admin, no OAuth, no page sharing — paste three values from your browser and go.
+**notion-mcp** uses Notion's internal API, the same one the web app uses, and exposes it over
+MCP: full-text search, page export to markdown, and markdown import back in. You don't need
+workspace admin rights, an OAuth integration, or per-page sharing. You paste three values from
+your browser and run it.
 
 ## The problem
 
@@ -37,8 +38,8 @@ npx @shck-dev/notion-mcp init
 claude mcp add notion -- npx @shck-dev/notion-mcp
 ```
 
-`init` saves your credentials, so the `add` command needs no `env` block. Prefer to wire it up
-by hand — say, for another MCP client? Set `NOTION_TOKEN` (the `token_v2` cookie),
+`init` saves your credentials, so the `add` command needs no `env` block. To wire it up by hand
+(for example, in another MCP client), set `NOTION_TOKEN` (the `token_v2` cookie),
 `NOTION_USER_ID`, and `NOTION_SPACE_ID` as env vars on the server command instead.
 
 ## Trade-offs

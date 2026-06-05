@@ -46,9 +46,8 @@ const buildDate = new Date().toISOString().slice(0, 10);
 const iso = (d: string | Date | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 ---
 
-<Base title="changelog" description="Release history of shck.dev open-source tools — compiled from GitHub releases at build time.">
-  <h1>changelog <span class="dim">/ release history</span></h1>
-  <p class="intro">Compiled from GitHub releases at build time — <b>always in sync</b>.</p>
+<Base title="changelog" description="Release notes for ccx and notion-mcp.">
+  <h1>changelog</h1>
   <div class="stats">
     <span><b>{TOOLS.length}</b> {TOOLS.length === 1 ? 'tool' : 'tools'}</span>
     {latest && <span>latest: <b>{latest.label}</b></span>}
@@ -79,11 +78,6 @@ const iso = (d: string | Date | null | undefined) => (d ? new Date(d).toISOStrin
     ))
   }
 
-  <span slot="foot">
-    <b>How to read this:</b> every entry is a GitHub release, fetched from each repo's
-    releases.atom at build time; a repository_dispatch rebuilds the page on release.
-    Nothing here is hand-maintained.
-  </span>
 </Base>
 
 <style>
