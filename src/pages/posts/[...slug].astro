@@ -20,10 +20,11 @@ const metaLine = [iso(date), ...(tool ? [tool] : []), ...tags.filter((x) => x !=
 ---
 
 <Base title={post.data.title} description={post.data.description} ogImage={`/og/${post.id}.png`}>
-  <article>
+  <article class="rise">
+    <a class="back" href="/posts/">← writing</a>
     <h1>{post.data.title}</h1>
     <p class="meta">{metaLine}</p>
-    <hr />
+    <hr class="ruleheavy" />
     <div class="prose"><Content /></div>
   </article>
 </Base>

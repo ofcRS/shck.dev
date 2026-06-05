@@ -48,62 +48,73 @@ const latest = tools
   .filter((t) => t.latest)
   .sort((a, b) => new Date(b.latest!.date ?? 0).valueOf() - new Date(a.latest!.date ?? 0).valueOf())
   .map((t) => ({ label: `${t.tool.name} ${version(t.latest!.title)}` }))[0];
-
-const buildDate = new Date().toISOString().slice(0, 10);
 ---
 
 <Base>
-  <h1>shck.dev <span class="dim">/ I build developer tools</span></h1>
-  <p class="intro">
-    I'm Aleksandr. I build small developer tools — right now <b>ccx</b> (context for Claude
-    Code) and <b>notion-mcp</b> (Notion over MCP).
-  </p>
-  <div class="stats">
-    <span><b>{TOOLS.length}</b> {TOOLS.length === 1 ? 'tool' : 'tools'}</span>
-    <span><b>{postCount}</b> {postCount === 1 ? 'post' : 'posts'}</span>
-    {latest && <span>latest: <b>{latest.label}</b></span>}
-    <span>{buildDate}</span>
-  </div>
-  <h2>tools</h2>
-  {
-    tools.map(({ tool: t, latest: rel }) => (
-      <div class="row">
-        <span>
-          <a class="tool" style={`color:${t.accent}`} href={`https://github.com/${t.repo}`}>
-            {t.name}
-          </a>
-          <span class="blurb"> — {t.blurb}</span>
-        </span>
-        <span class="right">{rel ? version(rel.title) : '—'}</span>
-      </div>
-    ))
-  }
+  <section class="hero rise">
+    <h1>I build developer tools</h1>
+    {latest && <div class="stamp">latest: {latest.label}</div>}
+    <p class="intro">
+      I'm Aleksandr. I build small developer tools — right now <b>ccx</b> (context for Claude
+      Code) and <b>notion-mcp</b> (Notion over MCP).
+    </p>
+  </section>
 
-  <h2>writing</h2>
-  {
-    posts.length ? (
-      posts.map((p) => (
-        <div class="row">
-          <a href={`/posts/${p.id}/`}>{p.data.title}</a>
-          <span class="right">{iso(p.data.date)}</span>
+  <section class="rise">
+    <h2>tools</h2>
+    <div class="cells">
+      {
+        tools.map(({ tool: t, latest: rel }) => (
+          <div class="cell">
+            <div class="name">
+              <a href={`https://github.com/${t.repo}`}>{t.name}</a>
+            </div>
+            <p class="blurb">{t.blurb}</p>
+            <div class="cmeta">
+              <span class="ver">{rel ? version(rel.title) : 'wip'}</span>
+              <span>{t.repo}</span>
+              {rel?.date && <span>{iso(rel.date)}</span>}
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="rise">
+    <h2>writing</h2>
+    {
+      posts.length ? (
+        <div class="rows">
+          {posts.map((p) => (
+            <div class="row">
+              <span class="date">{iso(p.data.date)}</span>
+              <a class="title" href={`/posts/${p.id}/`}>
+                {p.data.title}
+              </a>
+            </div>
+          ))}
+          {postCount > 5 && (
+            <div class="row">
+              <span class="date" />
+              <a class="endlink" href="/posts/">
+                all posts →
+              </a>
+            </div>
+          )}
         </div>
-      ))
-    ) : (
-      <p class="note">(no posts yet)</p>
-    )
-  }
-  {
-    postCount > 5 && (
-      <div class="row">
-        <a href="/posts/">all posts →</a>
-        <span class="right" />
-      </div>
-    )
-  }
-
+      ) : (
+        <p class="note">(no posts yet)</p>
+      )
+    }
+  </section>
 </Base>
 
 <style>
-  .tool { font-weight: 700; text-decoration: none; }
-  .tool:hover { text-decoration: underline; }
+  .hero h1 { font-size: 50px; letter-spacing: -1.6px; line-height: 1.02; max-width: 13ch; margin: 36px 0 18px; }
+  .hero .stamp { margin: 0 0 22px; }
+  .hero .intro { margin-bottom: 4px; }
+  @media (max-width: 620px) {
+    .hero h1 { font-size: 34px; letter-spacing: -1px; }
+  }
 </style>

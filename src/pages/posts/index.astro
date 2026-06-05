@@ -11,13 +11,23 @@ const iso = (d: string | Date | null | undefined) =>
 ---
 
 <Base title="posts" description="All posts on shck.dev">
-  <h1>writing</h1>
-  {
-    posts.map((p) => (
-      <div class="row">
-        <a href={`/posts/${p.id}/`}>{p.data.title}</a>
-        <span class="right">{iso(p.data.date)}</span>
-      </div>
-    ))
-  }
+  <section class="rise">
+    <h1>writing</h1>
+    {
+      posts.length ? (
+        <div class="rows">
+          {posts.map((p) => (
+            <div class="row">
+              <span class="date">{iso(p.data.date)}</span>
+              <a class="title" href={`/posts/${p.id}/`}>
+                {p.data.title}
+              </a>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p class="note">(no posts yet)</p>
+      )
+    }
+  </section>
 </Base>

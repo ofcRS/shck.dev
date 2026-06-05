@@ -38,50 +38,81 @@ const version = (title: string) => {
 
 const latest = sections
   .map(({ tool, releases }) => (releases[0] ? { tool, release: releases[0] } : null))
-  .filter((x): x is { tool: (typeof TOOLS)[number]; release: (typeof sections)[number]['releases'][number] } => x !== null)
+  .filter(
+    (x): x is { tool: (typeof TOOLS)[number]; release: (typeof sections)[number]['releases'][number] } =>
+      x !== null,
+  )
   .sort((a, b) => new Date(b.release.date ?? 0).valueOf() - new Date(a.release.date ?? 0).valueOf())
   .map(({ tool, release }) => ({ label: `${tool.name} ${version(release.title)}` }))[0];
 
-const buildDate = new Date().toISOString().slice(0, 10);
-const iso = (d: string | Date | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+const iso = (d: string | Date | null | undefined) =>
+  d ? new Date(d).toISOString().slice(0, 10) : '';
 ---
 
 <Base title="changelog" description="Release notes for ccx and notion-mcp.">
-  <h1>changelog</h1>
-  <div class="stats">
-    <span><b>{TOOLS.length}</b> {TOOLS.length === 1 ? 'tool' : 'tools'}</span>
-    {latest && <span>latest: <b>{latest.label}</b></span>}
-    <span>{buildDate}</span>
-  </div>
+  <section class="rise">
+    <h1>changelog</h1>
+    {latest && <div class="stamp">latest: {latest.label}</div>}
+  </section>
+
   {
     sections.map(({ tool, releases }) => (
-      <section>
-        <h2 class="toolhead" style={`color:${tool.accent}`}>
-          <span>{tool.name}</span>
-          <a class="repo" href={`https://github.com/${tool.repo}`}>{tool.repo}</a>
-        </h2>
+      <section class="rise toolsec">
+        <div class="toolhead">
+          <span class="tname">
+            <a href={`https://github.com/${tool.repo}`}>{tool.name}</a>
+          </span>
+          <span class="trepo">{tool.repo}</span>
+        </div>
         <p class="note">{tool.blurb}</p>
         {releases.length ? (
-          releases.map((r) => (
-            <div class="relrow">
-              <div class="relhead">
-                <a href={r.url}>{r.title}</a>
-                <span class="right">{iso(r.date)}</span>
+          <div class="rels">
+            {releases.map((r, i) => (
+              <div class="rel">
+                <div class="relhead">
+                  <a class="title" href={r.url}>
+                    {r.title}
+                  </a>
+                  <span class="rmeta">
+                    {i === 0 && <span class="cur">current</span>}
+                    <span class="date">{iso(r.date)}</span>
+                  </span>
+                </div>
+                {r.html && <div class="relbody" set:html={r.html} />}
               </div>
-              {r.html && <div class="relbody" set:html={r.html} />}
-            </div>
-          ))
+            ))}
+          </div>
         ) : (
           <p class="note">(no releases yet)</p>
         )}
       </section>
     ))
   }
-
 </Base>
 
 <style>
-  .relrow { border-bottom: 1px solid var(--rule); padding: 8px 0; }
+  .toolsec { margin-top: 40px; }
+  .toolhead { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--rule); }
+  .tname { font-size: 19px; font-weight: 600; }
+  .tname a { color: var(--ink); text-decoration: none; }
+  .tname a:hover { box-shadow: inset 0 -0.5em 0 var(--signal); }
+  .trepo { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); }
+  .toolsec .note { margin: 10px 0 14px; }
+
+  .rels { border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
+  .rel { padding: 14px 22px; border-bottom: 1px solid var(--rule); }
   .relhead { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
-  .relhead .right { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .relhead .title { font-size: 15px; font-weight: 600; color: var(--ink); text-decoration: none; }
+  .relhead .title:hover { box-shadow: inset 0 -0.5em 0 var(--signal); }
+  .rmeta { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+  .cur { font-family: var(--pixel); font-size: 9px; letter-spacing: 0.4px; text-transform: uppercase; background: var(--signal); color: var(--ink); padding: 3px 5px 2px; }
+  .date { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); }
+
+  .relbody { margin-top: 8px; font-size: 13px; line-height: 1.6; color: #3f3f46; }
+  .relbody :global(p), .relbody :global(ul), .relbody :global(ol) { margin: 4px 0; }
+  .relbody :global(ul), .relbody :global(ol) { padding-left: 20px; }
+  .relbody :global(h1), .relbody :global(h2), .relbody :global(h3) { font-size: 13px; font-weight: 600; margin: 8px 0 2px; }
+  .relbody :global(a) { color: var(--ink); }
+  .relbody :global(code) { font-family: var(--mono); font-size: 12px; background: #efefe9; padding: 1px 4px; border-radius: 2px; }
+  .relbody :global(pre) { background: var(--paper); border: 1px solid var(--rule); padding: 10px 12px; overflow-x: auto; font-size: 12px; }
 </style>

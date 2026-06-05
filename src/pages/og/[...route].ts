@@ -15,15 +15,16 @@ const route = await OGImageRoute({
   getImageOptions: (_path: string, page: any) => ({
     title: page.title,
     description: page.description ?? '',
-    bgGradient: [[252, 252, 252]],
-    border: { color: [79, 70, 229], width: 12, side: 'inline-start' },
+    bgGradient: [[251, 251, 249]],
+    border: { color: [200, 255, 0], width: 18, side: 'inline-start' },
+    padding: 60,
     font: {
-      title: { color: [10, 10, 10], families: ['JetBrains Mono'], weight: 'Medium' },
-      description: { color: [107, 107, 107], families: ['JetBrains Mono'] },
+      title: { color: [24, 24, 27], families: ['Geist'], weight: 'Bold' },
+      description: { color: [113, 113, 122], families: ['Geist'], weight: 'Normal' },
     },
     fonts: [
-      'https://api.fontsource.org/v1/fonts/jetbrains-mono/latin-500-normal.ttf',
-      'https://api.fontsource.org/v1/fonts/jetbrains-mono/latin-400-normal.ttf',
+      'https://cdn.jsdelivr.net/fontsource/fonts/geist@latest/latin-700-normal.ttf',
+      'https://cdn.jsdelivr.net/fontsource/fonts/geist@latest/latin-400-normal.ttf',
     ],
   }),
 });
