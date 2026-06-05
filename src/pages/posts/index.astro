@@ -6,20 +6,18 @@ const posts = (await getCollection('posts', ({ data }) => !data.draft)).sort(
   (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
 );
 
-const fmt = (d: Date) =>
-  d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' });
+const iso = (d: string | Date | null | undefined) =>
+  d ? new Date(d).toISOString().slice(0, 10) : '';
 ---
 
 <Base title="posts" description="All posts on shck.dev">
-  <h1>posts</h1>
-  <ul class="post-list">
-    {
-      posts.map((p) => (
-        <li>
-          <a href={`/posts/${p.id}/`}>{p.data.title}</a>
-          <time datetime={p.data.date.toISOString()}>{fmt(p.data.date)}</time>
-        </li>
-      ))
-    }
-  </ul>
+  <h1>writing <span class="dim">/ all posts, newest first</span></h1>
+  {
+    posts.map((p) => (
+      <div class="row">
+        <a href={`/posts/${p.id}/`}>{p.data.title}</a>
+        <span class="right">{iso(p.data.date)}</span>
+      </div>
+    ))
+  }
 </Base>

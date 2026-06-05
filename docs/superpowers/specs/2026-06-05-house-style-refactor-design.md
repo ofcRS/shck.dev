@@ -55,9 +55,9 @@ redirects there.
 
 ### 3.3 Hierarchy by rules, not boxes
 
-Heavy `1px solid var(--fg)` top-rules anchor exactly two kinds of bands: the **stats band** and
-the **footer**. Hairlines (`var(--rule)`) everywhere else: nav bottom, h2 underline, row
-separators, pre borders. No shadows, no gradients, no animation, radius ≤2px. Emphasis inside
+Heavy `1px solid var(--fg)` top-rules anchor the **stats band**, the **footer**, and (matching
+the kit's table idiom) **table header rows** in prose. Hairlines (`var(--rule)`) everywhere
+else: nav bottom, h2 underline, row separators, pre borders. No shadows, no gradients, no animation, radius ≤2px. Emphasis inside
 muted text = `<b>` in ink.
 
 ### 3.4 Links
@@ -186,6 +186,7 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 16px 0 20px; }
   margin: 0 0 6px;
   font-size: 12.5px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .stats b { color: var(--fg); font-weight: 700; }
 .srcline { color: var(--muted); font-size: 11px; margin: 11px 0 0; }
@@ -235,8 +236,13 @@ New frontmatter computes, at build time:
 
 - `posts`: non-draft, date-desc (keep), `slice(0, 5)`.
 - Per-tool latest release: for each `TOOLS` entry, `getCollection(\`releases_${t.name}\` as any)`
-  wrapped in try/catch (empty array on failure), normalized exactly like changelog.astro does
-  today (`title/link/url`, `pubdate/pubDate/published/date`), date-desc; take `[0]`.
+  wrapped in try/catch (empty array on failure), normalized identically in both pages against
+  the **@ascorbic/feed-loader v2 entry schema**: `title: d.title ?? e.id`,
+  `url: d.url ?? <github releases fallback>`, `date: d.updated ?? d.published ?? null` (for
+  GitHub releases.atom the date lives in `updated`; `published` is null), and — changelog
+  only — `html: d.content ?? d.description ?? ''` (the release body lives in `content`).
+  Legacy rss-parser keys (`pubdate`/`pubDate`/`link`/`summary`) do not exist on this schema.
+  Sort date-desc; take `[0]`.
 - `version(title)`: first match of `/v?(\d+\.\d+\.\d+)/` in the release title → display
   `v${m[1]}`; fall back to `'—'`.
 - `latest`: across all tools' newest releases, the most recent by date → label
@@ -313,8 +319,10 @@ wiring unchanged.
 
 ### 4.5 `src/pages/changelog.astro`
 
-Keep the normalization frontmatter (it already matches this spec), but wrap each
-`getCollection` in try/catch → `[]`, and add: per-tool latest, overall `latest` label and
+Keep the normalization frontmatter's shape but fix its field names to the feed-loader v2
+schema per §4.2 (the inherited `pubdate/pubDate/date/summary/link` keys never matched — they
+silently dropped every release date and body), wrap each `getCollection` in try/catch → `[]`,
+and add: per-tool latest, overall `latest` label and
 `buildDate` (same helpers as 4.2 — duplicating ~10 lines across the two pages is fine; do
 not invent a shared lib file).
 

@@ -15,11 +15,11 @@ const route = await OGImageRoute({
   getImageOptions: (_path: string, page: any) => ({
     title: page.title,
     description: page.description ?? '',
-    bgGradient: [[10, 10, 10]],
-    border: { color: [94, 234, 212], width: 12, side: 'inline-start' },
+    bgGradient: [[252, 252, 252]],
+    border: { color: [79, 70, 229], width: 12, side: 'inline-start' },
     font: {
-      title: { color: [255, 255, 255], families: ['JetBrains Mono'], weight: 'Medium' },
-      description: { color: [160, 160, 160], families: ['JetBrains Mono'] },
+      title: { color: [10, 10, 10], families: ['JetBrains Mono'], weight: 'Medium' },
+      description: { color: [107, 107, 107], families: ['JetBrains Mono'] },
     },
     fonts: [
       'https://api.fontsource.org/v1/fonts/jetbrains-mono/latin-500-normal.ttf',

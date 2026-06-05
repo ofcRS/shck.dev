@@ -8,15 +8,22 @@ import { TOOLS } from '../site.config';
 // tool repo rebuilds this page on every release. Nothing here is hand-maintained.
 const sections = await Promise.all(
   TOOLS.map(async (t) => {
-    const entries = (await getCollection(`releases_${t.name}` as any)) as any[];
+    let entries: any[] = [];
+    try {
+      entries = (await getCollection(`releases_${t.name}` as any)) as any[];
+    } catch {
+      entries = [];
+    }
     const releases = entries
       .map((e) => {
         const d: any = e.data;
         return {
           title: d.title ?? e.id,
-          url: d.link ?? d.url ?? `https://github.com/${t.repo}/releases`,
-          date: d.pubdate ?? d.pubDate ?? d.published ?? d.date ?? null,
-          html: d.description ?? d.summary ?? '',
+          url: d.url ?? `https://github.com/${t.repo}/releases`,
+          // feed-loader v2 schema: releases.atom date lives in `updated` (published is
+          // null for GitHub releases), the release body in `content`.
+          date: d.updated ?? d.published ?? null,
+          html: d.content ?? d.description ?? '',
         };
       })
       .sort((a, b) => new Date(b.date ?? 0).valueOf() - new Date(a.date ?? 0).valueOf());
@@ -24,38 +31,63 @@ const sections = await Promise.all(
   }),
 );
 
-const fmt = (d: string | Date | null) =>
-  d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }) : '';
+const version = (title: string) => {
+  const m = title.match(/v?(\d+\.\d+\.\d+)/);
+  return m ? `v${m[1]}` : '—';
+};
+
+const latest = sections
+  .map(({ tool, releases }) => (releases[0] ? { tool, release: releases[0] } : null))
+  .filter((x): x is { tool: (typeof TOOLS)[number]; release: (typeof sections)[number]['releases'][number] } => x !== null)
+  .sort((a, b) => new Date(b.release.date ?? 0).valueOf() - new Date(a.release.date ?? 0).valueOf())
+  .map(({ tool, release }) => ({ label: `${tool.name} ${version(release.title)}` }))[0];
+
+const buildDate = new Date().toISOString().slice(0, 10);
+const iso = (d: string | Date | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 ---
 
 <Base title="changelog" description="Release history of shck.dev open-source tools — compiled from GitHub releases at build time.">
-  <h1>changelog</h1>
-  <p class="meta">compiled from GitHub releases at build time — always in sync</p>
+  <h1>changelog <span class="dim">/ release history</span></h1>
+  <p class="intro">Compiled from GitHub releases at build time — <b>always in sync</b>.</p>
+  <div class="stats">
+    <span><b>{TOOLS.length}</b> {TOOLS.length === 1 ? 'tool' : 'tools'}</span>
+    {latest && <span>latest: <b>{latest.label}</b></span>}
+    <span>{buildDate}</span>
+  </div>
   {
     sections.map(({ tool, releases }) => (
       <section>
-        <h2>
-          <a href={`https://github.com/${tool.repo}`}>{tool.name}</a>
+        <h2 class="toolhead" style={`color:${tool.accent}`}>
+          <span>{tool.name}</span>
+          <a class="repo" href={`https://github.com/${tool.repo}`}>{tool.repo}</a>
         </h2>
-        <p class="meta">{tool.blurb}</p>
+        <p class="note">{tool.blurb}</p>
         {releases.length ? (
           releases.map((r) => (
-            <article class="release">
-              <h3>
-                <a href={r.url}>{r.title}</a> <span class="meta">{fmt(r.date)}</span>
-              </h3>
-              <div class="release-body" set:html={r.html} />
-            </article>
+            <div class="relrow">
+              <div class="relhead">
+                <a href={r.url}>{r.title}</a>
+                <span class="right">{iso(r.date)}</span>
+              </div>
+              {r.html && <div class="relbody" set:html={r.html} />}
+            </div>
           ))
         ) : (
-          <p class="meta">(no releases yet)</p>
+          <p class="note">(no releases yet)</p>
         )}
       </section>
     ))
   }
+
+  <span slot="foot">
+    <b>How to read this:</b> every entry is a GitHub release, fetched from each repo's
+    releases.atom at build time; a repository_dispatch rebuilds the page on release.
+    Nothing here is hand-maintained.
+  </span>
 </Base>
 
 <style>
-  .release { border-left: 2px solid var(--rule); padding-left: 1rem; margin: 1.25rem 0; }
-  .release-body { font-size: 0.9rem; color: var(--fg); }
+  .relrow { border-bottom: 1px solid var(--rule); padding: 8px 0; }
+  .relhead { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  .relhead .right { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 </style>

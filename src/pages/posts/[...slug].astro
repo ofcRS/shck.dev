@@ -10,18 +10,20 @@ export async function getStaticPaths() {
 const { post } = Astro.props;
 const { Content } = await render(post);
 
-const fmt = (d: Date) =>
-  d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+const iso = (d: string | Date | null | undefined) =>
+  d ? new Date(d).toISOString().slice(0, 10) : '';
+
+const { date, tags, tool } = post.data;
+const metaLine = [iso(date), ...(tool ? [tool] : []), ...tags.filter((x) => x !== tool)].join(
+  ' · ',
+);
 ---
 
 <Base title={post.data.title} description={post.data.description} ogImage={`/og/${post.id}.png`}>
   <article>
     <h1>{post.data.title}</h1>
-    <p class="meta">
-      <time datetime={post.data.date.toISOString()}>{fmt(post.data.date)}</time>
-      {post.data.tags.length > 0 && <> · {post.data.tags.join(' · ')}</>}
-    </p>
+    <p class="meta">{metaLine}</p>
     <hr />
-    <Content />
+    <div class="prose"><Content /></div>
   </article>
 </Base>

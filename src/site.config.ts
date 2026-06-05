@@ -13,6 +13,13 @@ export const TOOLS = [
   {
     name: 'ccx',
     repo: 'ofcRS/ccx-context-system',
+    accent: '#4f46e5',
     blurb: 'scratch-notebook context management for Claude Code — per-thread STATE handoffs + a compiled INDEX dashboard',
+  },
+  {
+    name: 'notion-mcp',
+    repo: 'shck-dev/notion-mcp',
+    accent: '#7c3aed',
+    blurb: 'Notion MCP server — search, export, and import pages as markdown; no OAuth, just a browser cookie',
   },
 ] as const;

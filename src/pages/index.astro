@@ -3,83 +3,110 @@ import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import { TOOLS } from '../site.config';
 
-const posts = (await getCollection('posts', ({ data }) => !data.draft))
-  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
-  .slice(0, 5);
+const all = (await getCollection('posts', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+const postCount = all.length;
+const posts = all.slice(0, 5);
 
-const fmt = (d: Date) =>
-  d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' });
+const version = (title: string) => {
+  const m = title.match(/v?(\d+\.\d+\.\d+)/);
+  return m ? `v${m[1]}` : '—';
+};
+
+const iso = (d: string | Date | null | undefined) =>
+  d ? new Date(d).toISOString().slice(0, 10) : '';
+
+// Per-tool latest release — one release collection per tool (see content.config.ts),
+// fetched from github.com/<repo>/releases.atom at build time; normalized exactly like
+// changelog.astro. try/catch so a missing/failed feed yields an empty array.
+const tools = await Promise.all(
+  TOOLS.map(async (t) => {
+    let entries: any[] = [];
+    try {
+      entries = (await getCollection(`releases_${t.name}` as any)) as any[];
+    } catch {
+      entries = [];
+    }
+    const releases = entries
+      .map((e) => {
+        const d: any = e.data;
+        return {
+          title: d.title ?? e.id,
+          url: d.url ?? `https://github.com/${t.repo}/releases`,
+          // feed-loader v2 schema: releases.atom date lives in `updated` (published is
+          // null for GitHub releases).
+          date: d.updated ?? d.published ?? null,
+        };
+      })
+      .sort((a, b) => new Date(b.date ?? 0).valueOf() - new Date(a.date ?? 0).valueOf());
+    return { tool: t, latest: releases[0] ?? null };
+  }),
+);
+
+const latest = tools
+  .filter((t) => t.latest)
+  .sort((a, b) => new Date(b.latest!.date ?? 0).valueOf() - new Date(a.latest!.date ?? 0).valueOf())
+  .map((t) => ({ label: `${t.tool.name} ${version(t.latest!.title)}` }))[0];
+
+const buildDate = new Date().toISOString().slice(0, 10);
 ---
 
 <Base>
-  <section class="hero">
-    <h1 class="hero-title">shck<span>.dev</span><span class="cursor"></span></h1>
-    <p class="tagline">open-source tools</p>
-  </section>
+  <h1>shck.dev <span class="dim">/ open-source developer tools</span></h1>
+  <p class="intro">Tools built in public — <b>release-fed changelogs</b>, write-ups when things ship.</p>
+  <div class="stats">
+    <span><b>{TOOLS.length}</b> {TOOLS.length === 1 ? 'tool' : 'tools'}</span>
+    <span><b>{postCount}</b> {postCount === 1 ? 'post' : 'posts'}</span>
+    {latest && <span>latest: <b>{latest.label}</b></span>}
+    <span>{buildDate}</span>
+  </div>
+  <p class="srcline">changelog compiled from GitHub releases at build time · nothing hand-maintained</p>
 
-  <section>
-    <h2>tools</h2>
-    <ul class="tool-list">
-      {
-        TOOLS.map((t) => (
-          <li>
-            <a href={`https://github.com/${t.repo}`}>{t.name}</a>
-            <span class="blurb"> — {t.blurb}</span>
-          </li>
-        ))
-      }
-    </ul>
-  </section>
+  <h2>tools</h2>
+  {
+    tools.map(({ tool: t, latest: rel }) => (
+      <div class="row">
+        <span>
+          <a class="tool" style={`color:${t.accent}`} href={`https://github.com/${t.repo}`}>
+            {t.name}
+          </a>
+          <span class="blurb"> — {t.blurb}</span>
+        </span>
+        <span class="right">{rel ? version(rel.title) : '—'}</span>
+      </div>
+    ))
+  }
 
-  <section>
-    <h2>recent posts</h2>
-    {
-      posts.length ? (
-        <ul class="post-list">
-          {posts.map((p) => (
-            <li>
-              <a href={`/posts/${p.id}/`}>{p.data.title}</a>
-              <time datetime={p.data.date.toISOString()}>{fmt(p.data.date)}</time>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p class="meta">(no posts yet)</p>
-      )
-    }
-    <p class="meta" style="margin-top: 1rem;">
-      <a href="/posts/">all posts</a> · <a href="/changelog/">tool changelog</a>
-    </p>
-  </section>
+  <h2>writing</h2>
+  {
+    posts.length ? (
+      posts.map((p) => (
+        <div class="row">
+          <a href={`/posts/${p.id}/`}>{p.data.title}</a>
+          <span class="right">{iso(p.data.date)}</span>
+        </div>
+      ))
+    ) : (
+      <p class="note">(no posts yet)</p>
+    )
+  }
+  {
+    postCount > 5 && (
+      <div class="row">
+        <a href="/posts/">all posts →</a>
+        <span class="right" />
+      </div>
+    )
+  }
+
+  <span slot="foot">
+    © {new Date().getFullYear()} shck · <a href="https://github.com/ofcRS">github</a> ·
+    <a href="/rss.xml">rss</a> — changelog is release-fed; nothing hand-maintained.
+  </span>
 </Base>
 
 <style>
-  .hero { text-align: center; padding: 3.5rem 0 2.5rem; }
-  .hero-title {
-    font-size: clamp(2rem, 6vw, 4rem);
-    font-weight: 300;
-    letter-spacing: 0.15em;
-    color: #fff;
-    margin: 0 0 0.5rem;
-  }
-  .hero-title span { color: var(--accent); }
-  .cursor {
-    display: inline-block;
-    width: 2px;
-    height: 1em;
-    background: var(--accent);
-    margin-left: 0.1em;
-    vertical-align: text-bottom;
-    animation: blink 1.1s steps(1) infinite;
-  }
-  @keyframes blink { 50% { opacity: 0; } }
-  .tagline {
-    font-size: 0.9rem;
-    color: var(--dim);
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-  }
-  .tool-list { list-style: none; padding: 0; }
-  .tool-list li { padding: 0.4rem 0; }
-  .blurb { color: var(--dim); font-size: 0.9rem; }
+  .tool { font-weight: 700; text-decoration: none; }
+  .tool:hover { text-decoration: underline; }
 </style>
