@@ -33,9 +33,9 @@ No ticket system required.
 ## Install
 
 ```
-/plugin marketplace add ofcRS/ccx-context-system
+/plugin marketplace add shck-dev/ccx-context-system
 /plugin install ccx@ccx-context-system
 ```
 
 Source, docs, and the concurrency design notes:
-[github.com/ofcRS/ccx-context-system](https://github.com/ofcRS/ccx-context-system).
+[github.com/shck-dev/ccx-context-system](https://github.com/shck-dev/ccx-context-system).

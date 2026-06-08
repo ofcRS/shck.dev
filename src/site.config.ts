@@ -12,7 +12,7 @@ export const SITE = {
 export const TOOLS = [
   {
     name: 'ccx',
-    repo: 'ofcRS/ccx-context-system',
+    repo: 'shck-dev/ccx-context-system',
     accent: '#4f46e5',
     blurb: 'context manager for Claude Code I use daily — keeps per-thread state when the window resets',
   },
