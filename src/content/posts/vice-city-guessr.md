@@ -81,13 +81,6 @@ off you are, near zero across the map. The daily scores on the server, and the a
 coordinates never reach the browser until you've locked in a guess, so you can't read them out
 of the page. The leaderboard is one SQLite table.
 
-## Shipping it next to the blog
-
-The game lives at `shck.dev/vc`, on the same server as this blog. I didn't want its config
-anywhere near the blog's, so it runs as its own service behind a separate nginx include — the
-blog config is left untouched. A deploy builds, pushes a timestamped release, flips a symlink to
-it, health-checks the new release, and rolls back automatically if it doesn't answer.
-
 ## Rough edges
 
 - The panoramas are rendered, not real. It's the game's geometry, and it looks like it.
