@@ -42,6 +42,20 @@ and deleted it when the batch finished. The run cost about $45.
 One honest note: these are renders of the game's geometry, not screenshots of the game. Same
 models, same textures, lit by hand. Up close it shows.
 
+## Getting the light right
+
+The first renders were flat. Default lighting, no real sky, and color management that left
+everything washed out under a grey haze — it looked like fog, not Miami.
+
+![First pass — flat lighting and a washed-out haze, no real sky.](/img/vice-city-guessr/render-before.jpg)
+
+The fix was scene setup, not the models. I gave the scene a sunset sky, dropped a water plane at
+the coastline so the shore reads as ocean, and changed the color management so it stopped
+desaturating everything to that milky pink. Same geometry, same camera — it just needed to be
+lit.
+
+![After — a sunset sky, an ocean, and a view transform that keeps the colour.](/img/vice-city-guessr/render-after.jpg)
+
 ## Picking where to stand
 
 My first attempt placed cameras by jittering positions near buildings. Half of them ended up on
