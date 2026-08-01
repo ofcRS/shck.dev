@@ -14,7 +14,7 @@ export const TOOLS = [
     name: 'ccx',
     repo: 'shck-dev/ccx-context-system',
     accent: '#4f46e5',
-    blurb: 'context manager for Claude Code I use daily — keeps per-thread state when the window resets',
+    blurb: 'scratch notebook for Claude Code I use daily — per-thread STATE docs that resume where the last session died, plus an INDEX that recompiles itself',
   },
   {
     name: 'notion-mcp',
