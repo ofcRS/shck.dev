@@ -1,6 +1,6 @@
 export const SITE = {
   title: 'shck.dev',
-  description: 'shck.dev — developer tools by Aleksandr: ccx and notion-mcp.',
+  description: 'shck.dev — developer tools by Aleksandr: ccx, notion-mcp, and kleoth.',
   author: 'shck',
   url: 'https://shck.dev',
 };
@@ -21,5 +21,11 @@ export const TOOLS = [
     repo: 'shck-dev/notion-mcp',
     accent: '#7c3aed',
     blurb: 'Notion MCP server I built: search, export, and import pages as markdown — no OAuth, just a browser cookie',
+  },
+  {
+    name: 'kleoth',
+    repo: 'ofcRS/kleoth',
+    accent: '#0d9488',
+    blurb: 'meeting recorder for macOS with no bot in the call — captures both sides locally, transcribes on-device with Whisper, leaves you a folder of markdown',
   },
 ] as const;

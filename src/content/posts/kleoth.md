@@ -3,6 +3,7 @@ title: 'Kleoth — a meeting recorder with no bot in the call'
 description: 'A local-first macOS meeting recorder: a Core Audio process tap captures the other side, Whisper transcribes it on the Neural Engine, and every meeting is a folder of Markdown you own.'
 date: 2026-08-02
 tags: ['kleoth', 'macos', 'swift', 'whisper']
+tool: 'kleoth'
 ---
 
 I built a meeting recorder for macOS that never sends a bot into your call. It records your

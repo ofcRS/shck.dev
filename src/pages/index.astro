@@ -56,7 +56,8 @@ const latest = tools
     {latest && <div class="stamp">latest: {latest.label}</div>}
     <p class="intro">
       I'm Aleksandr. I build small developer tools — right now <b>ccx</b> (context for Claude
-      Code) and <b>notion-mcp</b> (Notion over MCP).
+      Code), <b>notion-mcp</b> (Notion over MCP), and <b>kleoth</b> (a meeting recorder that
+      never leaves your Mac).
     </p>
   </section>
 
@@ -78,6 +79,8 @@ const latest = tools
           </div>
         ))
       }
+      {/* odd tool count leaves the 2-col grid's last slot empty — close the rectangle */}
+      {tools.length % 2 === 1 && <div class="cell filler" aria-hidden="true"></div>}
     </div>
   </section>
 
@@ -116,5 +119,6 @@ const latest = tools
   .hero .intro { margin-bottom: 4px; }
   @media (max-width: 620px) {
     .hero h1 { font-size: 34px; letter-spacing: -1px; }
+    .filler { display: none; } /* single column — nothing to close */
   }
 </style>
