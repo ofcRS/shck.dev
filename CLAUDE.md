@@ -19,9 +19,18 @@ surface via `astro check`/editor, not a script.
 Astro 6 static site (`output: static`, zero client JS, no UI framework). Two content sources:
 hand-written markdown posts, and GitHub release feeds pulled at build time.
 
-**`src/site.config.ts` is the registry.** `TOOLS` is the single source of truth for which tools
-exist. Adding a tool = one entry there; `content.config.ts` derives a `releases_<name>` collection
-per tool via `@ascorbic/feed-loader` against `https://github.com/<repo>/releases.atom`. Both
+**`src/site.config.ts` is the registry.** `TOOLS` drives the machinery: `content.config.ts` derives
+a `releases_<name>` collection per tool via `@ascorbic/feed-loader` against
+`https://github.com/<repo>/releases.atom`, and both the home grid and the changelog sections render
+straight from it. Posts never feed that grid — a post about a tool shows up in `/posts/` only.
+
+Adding a tool is *not* one edit, despite what the README says. The `TOOLS` entry, then three bits of
+hand-written prose that name the tools individually: the hero sentence in `index.astro`,
+`SITE.description`, and the `description` on changelog's `<Base>`. The home grid is two columns, so
+an odd tool count leaves the ruled rectangle open — `index.astro` appends a `.cell.filler` (hidden
+below 620px) to close it. `accent` on each entry is vestigial: declared, read by nothing.
+
+Both
 `index.astro` and `changelog.astro` read those collections and normalize each entry the same way
 (`data.updated ?? data.published` for the date — GitHub's atom leaves `published` null; `data.content`
 for the body), each wrapped in try/catch so a failed feed degrades to an empty section rather than
