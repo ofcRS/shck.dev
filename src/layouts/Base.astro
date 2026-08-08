@@ -142,15 +142,20 @@ const umamiId = import.meta.env.PUBLIC_UMAMI_WEBSITE_ID;
   .note { color: var(--gray); font-size: 13px; margin: 0 0 12px; }
   .meta { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); margin: 0; }
 
-  /* THE primitive — a hard-ruled grid, reused for tools / posts / changelog */
-  .cells { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
-  .cell { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 20px 22px 18px; }
-  .cell .name { font-weight: 600; font-size: 18px; margin: 0 0 7px; }
-  .cell .name a { color: var(--ink); text-decoration: none; }
-  .cell .name a:hover { box-shadow: inset 0 -0.5em 0 var(--signal); }
-  .cell .blurb { font-size: 14px; line-height: 1.55; color: var(--gray); margin: 0 0 16px; }
-  .cell .cmeta { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-  .cell .cmeta .ver { background: var(--signal); color: var(--ink); padding: 3px 6px 2px; }
+  /* THE primitive — hard-ruled full-width rows, used for tools (.ledger) and for
+     dated lists like posts / releases (.rows). Both close their rectangle at any
+     item count; neither needs a filler. */
+  .ledger { border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
+  .lrow { display: grid; grid-template-columns: 124px 1fr auto; gap: 18px; align-items: start; padding: 16px 22px 15px; border-bottom: 1px solid var(--rule); }
+  .lrow .rail { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); display: flex; flex-direction: column; gap: 3px; padding-top: 4px; }
+  .lrow .name { font-weight: 600; font-size: 18px; letter-spacing: -0.2px; margin: 0 0 5px; }
+  .lrow .name a { color: var(--ink); text-decoration: none; }
+  .lrow .name a:hover { box-shadow: inset 0 -0.5em 0 var(--signal); }
+  .lrow .blurb { font-size: 14px; line-height: 1.55; color: var(--gray); max-width: 56ch; margin: 0 0 8px; }
+  .lrow .repo { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); }
+  .lrow .ver { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; background: var(--signal); color: var(--ink); padding: 3px 6px 2px; white-space: nowrap; margin-top: 3px; }
+  /* no release yet — outlined, so it never reads as a shipped version */
+  .lrow .ver.wip { background: none; box-shadow: inset 0 0 0 1px var(--rule); color: var(--gray); }
 
   .rows { border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); }
   .row { display: grid; grid-template-columns: 124px 1fr; gap: 18px; align-items: baseline; padding: 14px 22px; border-bottom: 1px solid var(--rule); }
@@ -182,6 +187,10 @@ const umamiId = import.meta.env.PUBLIC_UMAMI_WEBSITE_ID;
   .prose pre code { background: none; padding: 0; font-size: inherit; }
   .prose blockquote { border-left: 2px solid var(--rule); padding-left: 14px; color: var(--gray); }
   .prose img { max-width: 100%; border: 1px solid var(--rule); }
+  .prose table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .prose th, .prose td { text-align: left; vertical-align: top; padding: 9px 12px; border: 1px solid var(--rule); }
+  .prose th { font-family: var(--pixel); font-size: 10px; font-weight: 400; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); }
+  .prose td:first-child { white-space: nowrap; }
 
   .back { font-family: var(--pixel); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--gray); text-decoration: none; display: inline-block; margin: 34px 0 0; }
   .back:hover { color: var(--ink); box-shadow: inset 0 -0.5em 0 var(--signal); }
@@ -201,7 +210,9 @@ const umamiId = import.meta.env.PUBLIC_UMAMI_WEBSITE_ID;
     .shell { padding: 0 20px; }
     .mast { padding-top: 30px; }
     h1 { font-size: 27px; }
-    .cells { grid-template-columns: 1fr; }
+    /* rail becomes a horizontal index · date line above the name */
+    .lrow { grid-template-columns: 1fr auto; gap: 10px 14px; }
+    .lrow .rail { grid-column: 1 / -1; flex-direction: row; gap: 10px; padding-top: 0; }
     .row { grid-template-columns: 92px 1fr; gap: 12px; }
   }
 

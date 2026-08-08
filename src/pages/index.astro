@@ -56,31 +56,32 @@ const latest = tools
     {latest && <div class="stamp">latest: {latest.label}</div>}
     <p class="intro">
       I'm Aleksandr. I build small developer tools — right now <b>ccx</b> (context for Claude
-      Code), <b>notion-mcp</b> (Notion over MCP), and <b>kleoth</b> (a meeting recorder that
-      never leaves your Mac).
+      Code), <b>notion-mcp</b> (Notion over MCP), <b>kleoth</b> (a meeting recorder that never
+      leaves your Mac), and <b>nvim-acai</b> (inline AI autocomplete for Neovim).
     </p>
   </section>
 
   <section class="rise">
     <h2>tools</h2>
-    <div class="cells">
+    <div class="ledger">
       {
-        tools.map(({ tool: t, latest: rel }) => (
-          <div class="cell">
-            <div class="name">
-              <a href={`https://github.com/${t.repo}`}>{t.name}</a>
+        tools.map(({ tool: t, latest: rel }, i) => (
+          <div class="lrow">
+            <div class="rail">
+              <span>{String(i + 1).padStart(2, '0')}</span>
+              <span>{rel?.date ? iso(rel.date) : '—'}</span>
             </div>
-            <p class="blurb">{t.blurb}</p>
-            <div class="cmeta">
-              <span class="ver">{rel ? version(rel.title) : 'wip'}</span>
-              <span>{t.repo}</span>
-              {rel?.date && <span>{iso(rel.date)}</span>}
+            <div>
+              <div class="name">
+                <a href={`https://github.com/${t.repo}`}>{t.name}</a>
+              </div>
+              <p class="blurb">{t.blurb}</p>
+              <div class="repo">{t.repo}</div>
             </div>
+            <span class:list={['ver', { wip: !rel }]}>{rel ? version(rel.title) : 'wip'}</span>
           </div>
         ))
       }
-      {/* odd tool count leaves the 2-col grid's last slot empty — close the rectangle */}
-      {tools.length % 2 === 1 && <div class="cell filler" aria-hidden="true"></div>}
     </div>
   </section>
 
@@ -119,6 +120,5 @@ const latest = tools
   .hero .intro { margin-bottom: 4px; }
   @media (max-width: 620px) {
     .hero h1 { font-size: 34px; letter-spacing: -1px; }
-    .filler { display: none; } /* single column — nothing to close */
   }
 </style>

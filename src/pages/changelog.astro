@@ -31,6 +31,10 @@ const sections = await Promise.all(
   }),
 );
 
+// A tool with no releases — feed empty, or fetch failed — renders no section at all,
+// rather than a bare heading. index.astro still lists it; it just shows `wip`.
+const published = sections.filter((s) => s.releases.length > 0);
+
 const version = (title: string) => {
   const m = title.match(/v?(\d+\.\d+\.\d+)/);
   return m ? `v${m[1]}` : '—';
@@ -49,14 +53,14 @@ const iso = (d: string | Date | null | undefined) =>
   d ? new Date(d).toISOString().slice(0, 10) : '';
 ---
 
-<Base title="changelog" description="Release notes for ccx, notion-mcp, and kleoth.">
+<Base title="changelog" description="Release notes for ccx, notion-mcp, kleoth, and nvim-acai.">
   <section class="rise">
     <h1>changelog</h1>
     {latest && <div class="stamp">latest: {latest.label}</div>}
   </section>
 
   {
-    sections.map(({ tool, releases }) => (
+    published.map(({ tool, releases }) => (
       <section class="rise toolsec">
         <div class="toolhead">
           <span class="tname">
@@ -65,26 +69,22 @@ const iso = (d: string | Date | null | undefined) =>
           <span class="trepo">{tool.repo}</span>
         </div>
         <p class="note">{tool.blurb}</p>
-        {releases.length ? (
-          <div class="rels">
-            {releases.map((r, i) => (
-              <div class="rel">
-                <div class="relhead">
-                  <a class="title" href={r.url}>
-                    {r.title}
-                  </a>
-                  <span class="rmeta">
-                    {i === 0 && <span class="cur">current</span>}
-                    <span class="date">{iso(r.date)}</span>
-                  </span>
-                </div>
-                {r.html && <div class="relbody" set:html={r.html} />}
+        <div class="rels">
+          {releases.map((r, i) => (
+            <div class="rel">
+              <div class="relhead">
+                <a class="title" href={r.url}>
+                  {r.title}
+                </a>
+                <span class="rmeta">
+                  {i === 0 && <span class="cur">current</span>}
+                  <span class="date">{iso(r.date)}</span>
+                </span>
               </div>
-            ))}
-          </div>
-        ) : (
-          <p class="note">(no releases yet)</p>
-        )}
+              {r.html && <div class="relbody" set:html={r.html} />}
+            </div>
+          ))}
+        </div>
       </section>
     ))
   }
