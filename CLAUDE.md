@@ -26,9 +26,15 @@ straight from it. Posts never feed that grid — a post about a tool shows up in
 
 Adding a tool is *not* one edit, despite what the README says. The `TOOLS` entry, then three bits of
 hand-written prose that name the tools individually: the hero sentence in `index.astro`,
-`SITE.description`, and the `description` on changelog's `<Base>`. The home grid is two columns, so
-an odd tool count leaves the ruled rectangle open — `index.astro` appends a `.cell.filler` (hidden
-below 620px) to close it. `accent` on each entry is vestigial: declared, read by nothing.
+`SITE.description`, and the `description` on changelog's `<Base>`. Declaration order in `TOOLS` is
+the render order on both pages — nothing sorts by date. `accent` on each entry is vestigial:
+declared, read by nothing.
+
+A tool with no GitHub releases is fine and needs no special-casing: the home ledger lists it with an
+outlined `wip` stamp in place of a version, and `changelog.astro` filters it out entirely so the page
+never shows a bare heading with nothing under it. Astro logs `The collection "releases_<name>" does
+not exist or is empty` during the build for such a tool — that warning is the expected path, not a
+failure.
 
 Both
 `index.astro` and `changelog.astro` read those collections and normalize each entry the same way
@@ -47,10 +53,14 @@ which generates an OG image for every post including drafts.
 
 **All styling is one global block** at the bottom of `src/layouts/Base.astro` — there is no CSS
 file and no Tailwind. Pages add only page-local `<style>` for their own bits. The shared vocabulary
-lives there and pages depend on those class names: `.cells`/`.cell` (2-col ruled grid, used for
-tools), `.rows`/`.row` (date + title list, used for posts and releases), `.prose` (post body),
-`.stamp` (citron "latest:" badge), `.meta`/`.note`/`.intro`, `.rise` (staggered entrance, honors
-`prefers-reduced-motion`). Design language: paper `#fbfbf9`, ink `#18181b`, one accent — citron
+lives there and pages depend on those class names: `.ledger`/`.lrow` (full-width ruled rows, used
+for tools — `124px 1fr auto`: pixel-font rail of index + date, then name/blurb/repo, then the version
+stamp; `.ver.wip` is the outlined no-release variant), `.rows`/`.row` (date + title list, used for
+posts and releases), `.prose` (post body, including `table`), `.stamp` (citron "latest:" badge),
+`.meta`/`.note`/`.intro`, `.rise` (staggered entrance, honors `prefers-reduced-motion`). Both ruled
+primitives close their rectangle at any item count — there is deliberately no filler-cell hack.
+The `.lrow` rail collapses to a horizontal line above the name below 620px.
+Design language: paper `#fbfbf9`, ink `#18181b`, one accent — citron
 `--signal: #c8ff00` used only for hover underlines and markers; Geist / Geist Mono / Silkscreen
 (the pixel font is for meta lines and dates only); hard 1px rules instead of cards or shadows.
 Cross-document crossfade comes from native `@view-transition`, not JS.
