@@ -1,6 +1,6 @@
 export const SITE = {
   title: 'shck.dev',
-  description: 'shck.dev — developer tools by Aleksandr: ccx, notion-mcp, and kleoth.',
+  description: 'shck.dev — developer tools by Aleksandr: ccx, notion-mcp, kleoth, and nvim-acai.',
   author: 'shck',
   url: 'https://shck.dev',
 };
@@ -27,5 +27,11 @@ export const TOOLS = [
     repo: 'ofcRS/kleoth',
     accent: '#0d9488',
     blurb: 'meeting recorder for macOS with no bot in the call — captures both sides locally, transcribes on-device with Whisper, leaves you a folder of markdown',
+  },
+  {
+    name: 'nvim-acai',
+    repo: 'ofcRS/nvim-acai',
+    accent: '#0ea5e9',
+    blurb: 'AI inline autocomplete for Neovim — ghost text as you type, from any provider you point it at: OpenRouter, OpenAI, Anthropic, or a local Ollama',
   },
 ] as const;
