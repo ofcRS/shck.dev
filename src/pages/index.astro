@@ -1,6 +1,7 @@
 ---
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
+import HeroSignal from '../components/HeroSignal.astro';
 import { TOOLS } from '../site.config';
 
 const all = (await getCollection('posts', ({ data }) => !data.draft)).sort(
@@ -51,7 +52,7 @@ const latest = tools
 ---
 
 <Base>
-  <section class="hero rise">
+  <HeroSignal>
     <h1>I build developer tools</h1>
     {latest && <div class="stamp">latest: {latest.label}</div>}
     <p class="intro">
@@ -59,7 +60,7 @@ const latest = tools
       Code), <b>notion-mcp</b> (Notion over MCP), <b>kleoth</b> (a meeting recorder that never
       leaves your Mac), and <b>nvim-acai</b> (inline AI autocomplete for Neovim).
     </p>
-  </section>
+  </HeroSignal>
 
   <section class="rise">
     <h2>tools</h2>
@@ -114,11 +115,3 @@ const latest = tools
   </section>
 </Base>
 
-<style>
-  .hero h1 { font-size: 50px; letter-spacing: -1.6px; line-height: 1.02; max-width: 13ch; margin: 36px 0 18px; }
-  .hero .stamp { margin: 0 0 22px; }
-  .hero .intro { margin-bottom: 4px; }
-  @media (max-width: 620px) {
-    .hero h1 { font-size: 34px; letter-spacing: -1px; }
-  }
-</style>

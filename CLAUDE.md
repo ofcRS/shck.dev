@@ -16,8 +16,22 @@ surface via `astro check`/editor, not a script.
 
 ## Architecture
 
-Astro 6 static site (`output: static`, zero client JS, no UI framework). Two content sources:
+Astro 6 static site (`output: static`, no UI framework). The only client JS on the site is the
+WebGPU hero island (see **Home hero** below); everything else ships zero JS. Two content sources:
 hand-written markdown posts, and GitHub release feeds pulled at build time.
+
+**Home hero** is `src/components/HeroSignal.astro`: a full-bleed dark plate under the masthead
+running a WebGPU perspective grid (grey-white streaks, faint stars) as one raw WGSL
+fullscreen-triangle fragment shader — no libraries. Interactive: pointer parallax, a floor
+spotlight that follows the cursor's projected ray, and click ripples (a 4-slot ring buffer in the
+uniforms). The pointer→floor projection exists twice — WGSL and the JS `floorHit()` — and the two
+camera formulas must stay identical. The hero text (h1/stamp/intro) is slotted
+in from `index.astro`, so slotted-content styling in the component must use `:global()`. Degradation
+is deliberate and silent: no `navigator.gpu` → the CSS dark plate with white hero text stands alone;
+`prefers-reduced-motion` → the shader renders exactly one static frame; otherwise an
+IntersectionObserver pauses the rAF loop while the plate is off-screen. The full-bleed breakout
+(`margin-inline: calc(50% - 50vw)`) overshoots by the scrollbar gutter — `overflow-x: clip` on
+`body` in `Base.astro` exists to absorb that; don't remove it.
 
 **`src/site.config.ts` is the registry.** `TOOLS` drives the machinery: `content.config.ts` derives
 a `releases_<name>` collection per tool via `@ascorbic/feed-loader` against
@@ -52,7 +66,8 @@ which generates an OG image for every post including drafts.
 `[...slug].astro`; other pages fall back to `/og/site.png`.
 
 **All styling is one global block** at the bottom of `src/layouts/Base.astro` — there is no CSS
-file and no Tailwind. Pages add only page-local `<style>` for their own bits. The shared vocabulary
+file and no Tailwind. Pages add only page-local `<style>` for their own bits (`HeroSignal.astro`
+carries its own scoped block for the dark plate and its white-on-dark hero text overrides). The shared vocabulary
 lives there and pages depend on those class names: `.ledger`/`.lrow` (full-width ruled rows, used
 for tools — `124px 1fr auto`: pixel-font rail of index + date, then name/blurb/repo, then the version
 stamp; `.ver.wip` is the outlined no-release variant), `.rows`/`.row` (date + title list, used for

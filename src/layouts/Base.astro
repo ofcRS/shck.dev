@@ -89,6 +89,8 @@ const umamiId = import.meta.env.PUBLIC_UMAMI_WEBSITE_ID;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     min-height: 100vh;
+    /* full-bleed breakouts (home hero plate) overshoot by the scrollbar gutter */
+    overflow-x: clip;
   }
   .shell { max-width: 860px; margin: 0 auto; padding: 0 36px; display: flex; flex-direction: column; min-height: 100vh; }
 
