@@ -1,10 +1,13 @@
 ---
 // The home hero: a full-bleed dark plate under the masthead running a WebGPU
-// perspective grid — grey-white traffic streaks, faint stars, pointer parallax.
-// The site's only client JS. Three tiers, all silent: no `navigator.gpu` means
-// the plate stays a flat dark ground (the CSS below carries the hero on its own);
-// `prefers-reduced-motion` renders exactly one static frame; otherwise it
-// animates, pausing whenever the plate is scrolled off-screen.
+// perspective grid — grey-white traffic streaks, faint stars — that behaves
+// like a lattice of strings: the camera sways and dollies with the pointer,
+// the lines nearest the cursor part around it, and a click strums the nearby
+// columns and rows. The site's only client JS. Three tiers, all silent: no
+// `navigator.gpu` means the plate stays a flat dark ground (the CSS below
+// carries the hero on its own); `prefers-reduced-motion` renders exactly one
+// static frame; otherwise it animates, pausing whenever the plate is
+// scrolled off-screen.
 ---
 
 <section class="plate">
@@ -22,7 +25,6 @@
     background: #0b0b0d;
     border-bottom: 2px solid var(--rule);
     overflow: hidden;
-    cursor: crosshair;
   }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .inwrap {
@@ -47,15 +49,21 @@
 <script>
   const WGSL = /* wgsl */ `
 struct U {
-  res     : vec2f,
-  mouse   : vec2f,
-  time    : f32,
-  aspect  : f32,
-  dpr     : f32,
-  ptrOn   : f32,
-  ripples : array<vec4f, 4>,  // xz origin, start time, amplitude
+  res    : vec2f,
+  mouse  : vec2f,
+  time   : f32,
+  aspect : f32,
+  dpr    : f32,
+  ptrOn  : f32,
+  hit    : vec2f,            // cursor's floor point (x, z), from JS floorHit()
+  pad    : vec2f,
+  ev     : array<vec4f, 4>,  // strums: (column, row, start time, amplitude)
 };
 @group(0) @binding(0) var<uniform> u : U;
+
+// camera feel — mirrored in the JS floorHit(); change both or neither
+const SWAY  = 1.8;   // look-around with the pointer
+const DOLLY = 1.0;   // camera slides sideways / up-down with the pointer
 
 @vertex
 fn vs(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
@@ -64,6 +72,7 @@ fn vs(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
 }
 
 fn hash1(n : f32) -> f32 { return fract(sin(n * 127.1) * 43758.5453123); }
+fn sq(x : f32) -> f32 { return x * x; }
 
 fn streak_color(s : f32, s2 : f32) -> vec3f {
   let dim = vec3f(0.55, 0.57, 0.55);
@@ -71,34 +80,83 @@ fn streak_color(s : f32, s2 : f32) -> vec3f {
   return mix(dim, brt, step(0.80, s)) * (0.35 + 0.55 * s2);
 }
 
-// floor plane at y = -1.7 (camera height sets grid density); returns
-// (streak rgb, grid mask). Derivatives stay in uniform control flow.
-fn layer(rd : vec3f, spot : vec2f, spotOn : f32) -> vec4f {
+// ---- the lattice as strings -------------------------------------------------
+const STRUM_W  = 2.2;    // how many strings out a strum reaches
+const STRUM_DT = 0.045;  // delay per string — the outward sweep
+
+// one string's transverse motion at local age a; every string has its own pitch
+fn ring(a : f32, j : f32) -> f32 {
+  let w = 14.0 + 4.0 * hash1(j * 7.3 + 1.7);
+  return (sin(a * w) + 0.4 * sin(a * w * 2.1 + 1.0)) / 1.4 * exp(-a * 1.9) * step(0.0, a);
+}
+
+// domain warp of the floor plane: lines part around the cursor like strings
+// under a finger, and the columns/rows near a strum ring and settle.
+fn warp(p : vec2f) -> vec2f {
+  let c = u.hit;
+  let dx = p.x - c.x; let dz = p.y - c.y;
+  var out = p;
+  let ex = exp(-dz * dz / 5.0); let ez = exp(-dx * dx / 5.0);
+  out.x -= dx * 0.7 * exp(-dx * dx / 1.4) * ex * u.ptrOn;
+  out.y -= dz * 0.7 * exp(-dz * dz / 1.4) * ez * u.ptrOn;
+  let kx = round(p.x); let kz = round(p.y);
+  for (var i = 0; i < 4; i = i + 1) {
+    let e = u.ev[i];
+    let age = u.time - e.z;
+    let envX = exp(-sq(p.y - e.y) / 20.0);
+    let envZ = exp(-sq(p.x - e.x) / 20.0);
+    // the three strings nearest this pixel, in each direction
+    for (var n = -1; n <= 1; n = n + 1) {
+      let j = kx + f32(n);
+      let dj = abs(j - e.x);
+      let ux = p.x - j;
+      out.x -= 0.3 * exp(-sq(dj / STRUM_W)) * exp(-ux * ux / 0.35) * envX * ring(age - dj * STRUM_DT, j) * e.w;
+      let m = kz + f32(n);
+      let dm = abs(m - e.y);
+      let uz = p.y - m;
+      out.y -= 0.3 * exp(-sq(dm / STRUM_W)) * exp(-uz * uz / 0.35) * envZ * ring(age - dm * STRUM_DT, m + 100.0) * e.w;
+    }
+  }
+  return out;
+}
+
+// a brief flash on each string as the strum reaches it
+fn strum_glow(p : vec2f, gX : f32, gZ : f32) -> f32 {
+  var l = 0.0;
+  let kx = round(p.x); let kz = round(p.y);
+  for (var i = 0; i < 4; i = i + 1) {
+    let e = u.ev[i];
+    let age = u.time - e.z;
+    let dj = abs(kx - e.x); let dm = abs(kz - e.y);
+    let aj = age - dj * STRUM_DT; let am = age - dm * STRUM_DT;
+    let fx = exp(-sq(dj / STRUM_W)) * exp(-aj * 5.0) * step(0.0, aj) * exp(-sq(p.y - e.y) / 12.0);
+    let fz = exp(-sq(dm / STRUM_W)) * exp(-am * 5.0) * step(0.0, am) * exp(-sq(p.x - e.x) / 12.0);
+    l += (gX * fx + gZ * fz) * e.w * 0.8;
+  }
+  return l;
+}
+
+fn camera() -> vec3f {
+  return vec3f(u.mouse.x * 1.1 * DOLLY, 1.7 - u.mouse.y * 0.4 * DOLLY, 0.0);
+}
+
+// floor plane under the camera; returns (light rgb, grid mask). p is (x, z).
+// Derivatives stay in uniform control flow.
+fn layer(rd : vec3f, cam : vec3f) -> vec4f {
   let denomRaw = -rd.y;
   let denom = max(denomRaw, 0.02);
-  let t = 1.7 / denom;
+  let t = cam.y / denom;
   let vis = smoothstep(0.012, 0.05, denomRaw);
-  let p = rd * t;
   let fog = exp(-t * 0.03);
-
-  // pointer spotlight: a pool of light on the floor under the cursor's ray
-  let dSpot = distance(p.xz, spot);
-  let sglow = exp(-dSpot * dSpot / 6.0) * spotOn;
-  // click ripples: expanding rings that flare the grid as they pass
-  var rip = 0.0;
-  for (var i = 0; i < 4; i = i + 1) {
-    let rw = u.ripples[i];
-    let age = u.time - rw.z;
-    let rr = abs(distance(p.xz, rw.xy) - age * 9.0);
-    rip += exp(-rr * rr / 0.8) * exp(-age * 1.1) * step(0.0, age) * rw.w;
-  }
+  let p = warp(cam.xz + rd.xz * t);
 
   let wX = fwidth(p.x);
+  let wZ = fwidth(p.y);
   let dX = 0.5 - abs(fract(p.x) - 0.5);
-  let dZ = 0.5 - abs(fract(p.z) - 0.5);
+  let dZ = 0.5 - abs(fract(p.y) - 0.5);
   let gX = 1.0 - smoothstep(0.0, wX * 1.4, dX);
-  let gZ = 1.0 - smoothstep(0.0, fwidth(p.z) * 1.4, dZ);
-  let grid = max(gX, gZ) * fog * vis * (1.0 + sglow * 2.2 + rip * 2.8);
+  let gZ = 1.0 - smoothstep(0.0, wZ * 1.4, dZ);
+  let grid = max(gX, gZ) * fog * vis;
 
   let id = round(p.x);
   let lat = abs(p.x - id);
@@ -114,14 +172,13 @@ fn layer(rd : vec3f, spot : vec2f, spotOn : f32) -> vec4f {
     let span = 46.0;
     let phase = u.time * spd / span + s2 * 7.13;
     let head = span * (1.0 - fract(phase));
-    let behind = p.z - head;
+    let behind = p.y - head;
     let a = clamp(1.0 - behind / len, 0.0, 1.0) * smoothstep(-1.2, 0.0, behind);
     let gate = step(0.60, hash1(id * 27.7 + fk * 57.3 + floor(phase) * 3.31 + 4.7));
     streak += streak_color(s, s2) * pow(a, 2.0) * gate;
   }
-  streak *= (lm + halo) * fog * vis * (1.0 + sglow * 0.8);
-  // soft area fill so spotlight and ripples read between the lines too
-  streak += vec3f(0.42, 0.44, 0.42) * (sglow * 0.07 + rip * 0.035) * fog * vis;
+  streak *= (lm + halo) * fog * vis;
+  streak += vec3f(0.86, 0.88, 0.86) * strum_glow(p, gX, gZ) * fog * vis;
   return vec4f(streak, grid);
 }
 
@@ -129,20 +186,13 @@ fn layer(rd : vec3f, spot : vec2f, spotOn : f32) -> vec4f {
 fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
   var uv = (fc.xy / u.res) * 2.0 - 1.0;
   uv = vec2f(uv.x * u.aspect, -uv.y);
-  let pitch = 0.24 + u.mouse.y * 0.11;
-  let yaw = u.mouse.x * 0.22;
+  let pitch = 0.24 + u.mouse.y * 0.11 * SWAY;
+  let yaw = u.mouse.x * 0.22 * SWAY;
   var rd = normalize(vec3f(uv.x, uv.y - pitch, 1.55));
   let cy = cos(yaw); let sy = sin(yaw);
   rd = vec3f(rd.x * cy + rd.z * sy, rd.y, rd.z * cy - rd.x * sy);
 
-  // pointer ray → floor hit, same camera as JS floorHit() — keep them in sync
-  var rp = normalize(vec3f(u.mouse.x * u.aspect, -u.mouse.y - pitch, 1.55));
-  rp = vec3f(rp.x * cy + rp.z * sy, rp.y, rp.z * cy - rp.x * sy);
-  let spotOn = smoothstep(0.03, 0.07, -rp.y) * u.ptrOn;
-  let tp = 1.7 / max(-rp.y, 0.03);
-  let spot = vec2f(rp.x, rp.z) * tp;
-
-  let fl = layer(rd, spot, spotOn);
+  let fl = layer(rd, camera());
   var col = vec3f(0.043, 0.043, 0.051);
   col += vec3f(0.38, 0.38, 0.42) * fl.w * 0.28;
   col += fl.xyz;
@@ -167,6 +217,10 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
 }
 `;
 
+  // must match the WGSL consts of the same name
+  const SWAY = 1.8;
+  const DOLLY = 1.0;
+
   const canvas = document.getElementById('sig-c');
 
   async function start(cv) {
@@ -180,7 +234,7 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
 
     const module = device.createShaderModule({ code: WGSL });
     const ubuf = device.createBuffer({
-      size: 96,
+      size: 112,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     const bgl = device.createBindGroupLayout({
@@ -198,13 +252,16 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
     });
 
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const uarr = new Float32Array(24);
+    const uarr = new Float32Array(28);
     let simT = still ? 11.0 : 0;
-    let mx = 0, my = 0, tx = 0, ty = 0;
+    let mx = 0, my = 0, tx = 0, ty = 0; // smoothed / target pointer, drives the camera
+    let px = 0, py = 0;                 // raw pointer, drives the floor hit
     let pOn = 0, pOnT = 0;
-    // click ripple ring buffer: [x, z, startTime, amplitude] × 4
-    const rips = [0, 0, -1e3, 0, 0, 0, -1e3, 0, 0, 0, -1e3, 0, 0, 0, -1e3, 0];
-    let ripIx = 0;
+    let hx = 0, hz = 6;                 // cursor's floor point, lightly smoothed
+    // strum ring buffer: [column, row, startTime, amplitude] × 4
+    const ev = new Float32Array(16);
+    for (let i = 0; i < 4; i++) ev[i * 4 + 2] = -1e3;
+    let evIx = 0;
 
     const dpr = () => Math.min(devicePixelRatio || 1, 2);
     const draw = () => {
@@ -214,7 +271,8 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       uarr[5] = cv.width / cv.height;
       uarr[6] = dpr();
       uarr[7] = pOn;
-      uarr.set(rips, 8);
+      uarr[8] = hx; uarr[9] = hz;
+      uarr.set(ev, 12);
       device.queue.writeBuffer(ubuf, 0, uarr);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
@@ -241,40 +299,42 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
 
     if (still) return;
 
-    // mirrors the WGSL camera exactly — pointer position → floor xz at click time
+    // mirrors the WGSL camera exactly — pointer position → floor (x, z), or null for sky
     const floorHit = (nx, ny) => {
-      const pitch = 0.24 + my * 0.11;
-      const yaw = mx * 0.22;
+      const pitch = 0.24 + my * 0.11 * SWAY;
+      const yaw = mx * 0.22 * SWAY;
+      const camX = mx * 1.1 * DOLLY, camH = 1.7 - my * 0.4 * DOLLY;
       let x = nx * (cv.width / cv.height), y = -ny - pitch, z = 1.55;
       const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
       const c = Math.cos(yaw), s = Math.sin(yaw);
       const rx = x * c + z * s, rz = z * c - x * s;
-      if (y > -0.04) return null;
-      const t = 1.7 / -y;
-      return [rx * t, rz * t];
+      if (y > -0.03) return null;
+      const t = camH / -y;
+      return [camX + rx * t, rz * t];
+    };
+    const norm = (e) => {
+      const r = cv.getBoundingClientRect();
+      return [((e.clientX - r.left) / r.width) * 2 - 1, ((e.clientY - r.top) / r.height) * 2 - 1];
     };
 
     addEventListener('pointermove', (e) => {
-      const r = cv.getBoundingClientRect();
-      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
-      const ny = ((e.clientY - r.top) / r.height) * 2 - 1;
+      const [nx, ny] = norm(e);
+      px = nx; py = ny;
       tx = Math.max(-1.4, Math.min(1.4, nx));
       ty = Math.max(-1.4, Math.min(1.4, ny));
       pOnT = Math.abs(nx) <= 1 && Math.abs(ny) <= 1 ? 1 : 0;
     }, { passive: true });
     document.addEventListener('mouseleave', () => { pOnT = 0; });
     addEventListener('pointerdown', (e) => {
-      const r = cv.getBoundingClientRect();
-      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
-      const ny = ((e.clientY - r.top) / r.height) * 2 - 1;
+      const [nx, ny] = norm(e);
       if (Math.abs(nx) > 1 || Math.abs(ny) > 1) return;
       const hit = floorHit(nx, ny);
       if (!hit) return;
-      rips[ripIx * 4] = hit[0];
-      rips[ripIx * 4 + 1] = hit[1];
-      rips[ripIx * 4 + 2] = simT;
-      rips[ripIx * 4 + 3] = 1;
-      ripIx = (ripIx + 1) % 4;
+      ev[evIx * 4] = Math.round(hit[0]);
+      ev[evIx * 4 + 1] = Math.round(hit[1]);
+      ev[evIx * 4 + 2] = simT;
+      ev[evIx * 4 + 3] = 1;
+      evIx = (evIx + 1) % 4;
     });
 
     let raf = 0;
@@ -285,9 +345,11 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       simT += dt;
-      mx += (tx - mx) * 0.09;
-      my += (ty - my) * 0.09;
-      pOn += (pOnT - pOn) * 0.12;
+      mx += (tx - mx) * 0.1;
+      my += (ty - my) * 0.1;
+      const hit = floorHit(px, py);
+      if (hit) { hx += (hit[0] - hx) * 0.5; hz += (hit[1] - hz) * 0.5; }
+      pOn += ((hit ? pOnT : 0) - pOn) * 0.15;
       draw();
       raf = requestAnimationFrame(frame);
     };

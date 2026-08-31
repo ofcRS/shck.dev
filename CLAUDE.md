@@ -22,10 +22,15 @@ hand-written markdown posts, and GitHub release feeds pulled at build time.
 
 **Home hero** is `src/components/HeroSignal.astro`: a full-bleed dark plate under the masthead
 running a WebGPU perspective grid (grey-white streaks, faint stars) as one raw WGSL
-fullscreen-triangle fragment shader — no libraries. Interactive: pointer parallax, a floor
-spotlight that follows the cursor's projected ray, and click ripples (a 4-slot ring buffer in the
-uniforms). The pointer→floor projection exists twice — WGSL and the JS `floorHit()` — and the two
-camera formulas must stay identical. The hero text (h1/stamp/intro) is slotted
+fullscreen-triangle fragment shader — no libraries. The grid behaves like a lattice of strings, and
+every interaction is expressed in its own line geometry (no cursor change, no spots, no rings —
+those were tried and rejected): the camera sways *and* dollies with the pointer (`SWAY`/`DOLLY`
+consts), the lines nearest the cursor's projected floor point part around it via a domain warp of
+the plane, and a click strums the nearby columns and rows — they ring with per-string pitch in an
+outward sweep and flash briefly as it reaches them (a 4-slot event ring buffer in the uniforms).
+The camera formula exists twice — WGSL and the JS `floorHit()`, which projects the pointer onto the
+floor and feeds `u.hit` — and the two must stay identical, `SWAY`/`DOLLY` included. The hero text
+(h1/stamp/intro) is slotted
 in from `index.astro`, so slotted-content styling in the component must use `:global()`. Degradation
 is deliberate and silent: no `navigator.gpu` → the CSS dark plate with white hero text stands alone;
 `prefers-reduced-motion` → the shader renders exactly one static frame; otherwise an
