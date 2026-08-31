@@ -29,7 +29,18 @@ consts), the lines nearest the cursor's projected floor point part around it via
 the plane, and a click strums the nearby columns and rows — they ring with per-string pitch in an
 outward sweep and flash briefly as it reaches them (a 4-slot event ring buffer in the uniforms).
 The camera formula exists twice — WGSL and the JS `floorHit()`, which projects the pointer onto the
-floor and feeds `u.hit` — and the two must stay identical, `SWAY`/`DOLLY` included. The hero text
+floor and feeds `u.hit` — and the two must stay identical, `SWAY`/`DOLLY` included.
+
+Shader compile time is the hero's real performance constraint, not frame time: the same WGSL
+compiles in 26 ms in Chrome-on-Metal and took 500+ ms in Safari (and reportedly up to a minute on
+some Windows drivers) when the per-string ringing math lived inside unrolled shader loops. Hence two
+rules. First, the per-string physics (`ring()`, falloff, flash) runs on the CPU in `fillTables()`
+and reaches the shader as small uniform tables (`ca`/`ra`/`cf`/`rf`, 8 slots per strum, slot 7
+always zero); the shader loops contain only lookups and polynomial `bump()`s — keep transcendentals
+out of them. Second, startup builds two pipelines from one source: `wgsl(false)` (no strings code,
+paints in tens of ms, fades the canvas in) and `wgsl(true)`, compiled only after that first frame
+has been presented — Safari's GPU process otherwise holds the frame back until the full compile
+finishes — and swapped in when ready. Reduced-motion uses the light pipeline only. The hero text
 (h1/stamp/intro) is slotted
 in from `index.astro`, so slotted-content styling in the component must use `:global()`. Degradation
 is deliberate and silent: no `navigator.gpu` → the CSS dark plate with white hero text stands alone;

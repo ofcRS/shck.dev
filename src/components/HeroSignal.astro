@@ -8,6 +8,12 @@
 // carries the hero on its own); `prefers-reduced-motion` renders exactly one
 // static frame; otherwise it animates, pausing whenever the plate is
 // scrolled off-screen.
+//
+// Startup is two pipelines from one shader source: a light one without the
+// strum code paints within tens of milliseconds, then the full one is
+// compiled and swapped in. Shader compile time varies wildly by browser and
+// GPU driver, so all per-string math (the ringing) runs on the CPU each frame
+// and reaches the shader as small tables — the shader only does lookups.
 ---
 
 <section class="plate">
@@ -26,7 +32,13 @@
     border-bottom: 2px solid var(--rule);
     overflow: hidden;
   }
-  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0;
+    transition: opacity 700ms ease;
+  }
+  canvas.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { canvas { transition: none; } }
   .inwrap {
     position: relative;
     z-index: 1;
@@ -47,7 +59,9 @@
 </style>
 
 <script>
-  const WGSL = /* wgsl */ `
+  // ---- shader ---------------------------------------------------------------
+  // Uniform layout (floats): see the offsets in draw() — 156 floats, 624 bytes.
+  const WGSL_HEAD = /* wgsl */ `
 struct U {
   res    : vec2f,
   mouse  : vec2f,
@@ -57,7 +71,11 @@ struct U {
   ptrOn  : f32,
   hit    : vec2f,            // cursor's floor point (x, z), from JS floorHit()
   pad    : vec2f,
-  ev     : array<vec4f, 4>,  // strums: (column, row, start time, amplitude)
+  ev     : array<vec4f, 4>,  // per strum: (first column, first row) of its 7-string window
+  ca     : array<vec4f, 8>,  // per strum: column displacements, 8 slots (7 strings + a zero)
+  ra     : array<vec4f, 8>,  // per strum: row displacements
+  cf     : array<vec4f, 8>,  // per strum: column flashes
+  rf     : array<vec4f, 8>,  // per strum: row flashes
 };
 @group(0) @binding(0) var<uniform> u : U;
 
@@ -72,23 +90,27 @@ fn vs(@builtin(vertex_index) vi : u32) -> @builtin(position) vec4f {
 }
 
 fn hash1(n : f32) -> f32 { return fract(sin(n * 127.1) * 43758.5453123); }
-fn sq(x : f32) -> f32 { return x * x; }
 
 fn streak_color(s : f32, s2 : f32) -> vec3f {
   let dim = vec3f(0.55, 0.57, 0.55);
   let brt = vec3f(0.95, 0.97, 0.95);
   return mix(dim, brt, step(0.80, s)) * (0.35 + 0.55 * s2);
 }
+`;
 
-// ---- the lattice as strings -------------------------------------------------
-const STRUM_W  = 2.2;    // how many strings out a strum reaches
-const STRUM_DT = 0.045;  // delay per string — the outward sweep
+  // light pipeline: the grid with no strings behaviour — compiles in ~20ms anywhere
+  const WGSL_STUB = /* wgsl */ `
+fn warp(p : vec2f) -> vec2f { return p; }
+fn strum_glow(p : vec2f, gX : f32, gZ : f32) -> f32 { return 0.0; }
+`;
 
-// one string's transverse motion at local age a; every string has its own pitch
-fn ring(a : f32, j : f32) -> f32 {
-  let w = 14.0 + 4.0 * hash1(j * 7.3 + 1.7);
-  return (sin(a * w) + 0.4 * sin(a * w * 2.1 + 1.0)) / 1.4 * exp(-a * 1.9) * step(0.0, a);
-}
+  // full pipeline: the lattice as strings. Deliberately no transcendentals inside
+  // the loops — only table lookups and polynomial bumps — to keep compile fast.
+  const WGSL_STRINGS = /* wgsl */ `
+const STRUM_HALF = 3.0;
+fn bump(t : f32) -> f32 { let s = clamp(1.0 - t * t, 0.0, 1.0); return s * s; }
+// string index within a strum's window → table slot; anything outside → slot 7 (always zero)
+fn slot(d : f32) -> i32 { let i = i32(clamp(d, -1.0, 8.0)); return select(7, i, i >= 0 && i <= 6); }
 
 // domain warp of the floor plane: lines part around the cursor like strings
 // under a finger, and the columns/rows near a strum ring and settle.
@@ -102,19 +124,16 @@ fn warp(p : vec2f) -> vec2f {
   let kx = round(p.x); let kz = round(p.y);
   for (var i = 0; i < 4; i = i + 1) {
     let e = u.ev[i];
-    let age = u.time - e.z;
-    let envX = exp(-sq(p.y - e.y) / 20.0);
-    let envZ = exp(-sq(p.x - e.x) / 20.0);
+    let envX = bump((p.y - (e.y + STRUM_HALF)) / 6.5);
+    let envZ = bump((p.x - (e.x + STRUM_HALF)) / 6.5);
     // the three strings nearest this pixel, in each direction
     for (var n = -1; n <= 1; n = n + 1) {
       let j = kx + f32(n);
-      let dj = abs(j - e.x);
-      let ux = p.x - j;
-      out.x -= 0.3 * exp(-sq(dj / STRUM_W)) * exp(-ux * ux / 0.35) * envX * ring(age - dj * STRUM_DT, j) * e.w;
+      let sj = slot(j - e.x);
+      out.x -= u.ca[i * 2 + sj / 4][sj % 4] * bump((p.x - j) / 0.95) * envX;
       let m = kz + f32(n);
-      let dm = abs(m - e.y);
-      let uz = p.y - m;
-      out.y -= 0.3 * exp(-sq(dm / STRUM_W)) * exp(-uz * uz / 0.35) * envZ * ring(age - dm * STRUM_DT, m + 100.0) * e.w;
+      let sm = slot(m - e.y);
+      out.y -= u.ra[i * 2 + sm / 4][sm % 4] * bump((p.y - m) / 0.95) * envZ;
     }
   }
   return out;
@@ -126,16 +145,16 @@ fn strum_glow(p : vec2f, gX : f32, gZ : f32) -> f32 {
   let kx = round(p.x); let kz = round(p.y);
   for (var i = 0; i < 4; i = i + 1) {
     let e = u.ev[i];
-    let age = u.time - e.z;
-    let dj = abs(kx - e.x); let dm = abs(kz - e.y);
-    let aj = age - dj * STRUM_DT; let am = age - dm * STRUM_DT;
-    let fx = exp(-sq(dj / STRUM_W)) * exp(-aj * 5.0) * step(0.0, aj) * exp(-sq(p.y - e.y) / 12.0);
-    let fz = exp(-sq(dm / STRUM_W)) * exp(-am * 5.0) * step(0.0, am) * exp(-sq(p.x - e.x) / 12.0);
-    l += (gX * fx + gZ * fz) * e.w * 0.8;
+    let sj = slot(kx - e.x);
+    let sm = slot(kz - e.y);
+    l += gX * u.cf[i * 2 + sj / 4][sj % 4] * bump((p.y - (e.y + STRUM_HALF)) / 5.0)
+       + gZ * u.rf[i * 2 + sm / 4][sm % 4] * bump((p.x - (e.x + STRUM_HALF)) / 5.0);
   }
   return l;
 }
+`;
 
+  const WGSL_TAIL = /* wgsl */ `
 fn camera() -> vec3f {
   return vec3f(u.mouse.x * 1.1 * DOLLY, 1.7 - u.mouse.y * 0.4 * DOLLY, 0.0);
 }
@@ -216,10 +235,24 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
   return vec4f(col, 1.0);
 }
 `;
+  const wgsl = (strings) => WGSL_HEAD + (strings ? WGSL_STRINGS : WGSL_STUB) + WGSL_TAIL;
 
+  // ---- strings physics (CPU side) --------------------------------------------
   // must match the WGSL consts of the same name
   const SWAY = 1.8;
   const DOLLY = 1.0;
+  const STRUM_W = 2.2;    // how many strings out a strum reaches
+  const STRUM_DT = 0.045; // delay per string — the outward sweep
+  const hash1 = (n) => { const x = Math.sin(n * 127.1) * 43758.5453123; return x - Math.floor(x); };
+  // one string's transverse motion at local age a; every string has its own pitch
+  const ring = (a, j) => {
+    if (a <= 0) return 0;
+    const w = 14 + 4 * hash1(j * 7.3 + 1.7);
+    return ((Math.sin(a * w) + 0.4 * Math.sin(a * w * 2.1 + 1)) / 1.4) * Math.exp(-a * 1.9);
+  };
+
+  // uniform float offsets
+  const U_EV = 12, U_CA = 28, U_RA = 60, U_CF = 92, U_RF = 124, U_LEN = 156;
 
   const canvas = document.getElementById('sig-c');
 
@@ -232,38 +265,80 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
     const format = navigator.gpu.getPreferredCanvasFormat();
     ctx.configure({ device, format, alphaMode: 'opaque' });
 
-    const module = device.createShaderModule({ code: WGSL });
     const ubuf = device.createBuffer({
-      size: 112,
+      size: U_LEN * 4,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     const bgl = device.createBindGroupLayout({
       entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: {} }],
     });
-    const pipeline = await device.createRenderPipelineAsync({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
-      vertex: { module, entryPoint: 'vs' },
-      fragment: { module, entryPoint: 'fs', targets: [{ format }] },
-      primitive: { topology: 'triangle-list' },
-    });
+    const layout = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
+    const makePipeline = (code) => {
+      const module = device.createShaderModule({ code });
+      return device.createRenderPipelineAsync({
+        layout,
+        vertex: { module, entryPoint: 'vs' },
+        fragment: { module, entryPoint: 'fs', targets: [{ format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+    };
     const bind = device.createBindGroup({
       layout: bgl,
       entries: [{ binding: 0, resource: { buffer: ubuf } }],
     });
 
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const uarr = new Float32Array(28);
+    // light pipeline first so the grid is on screen fast; the full one is compiled only
+    // once the first frame has been presented (Safari's GPU process would otherwise
+    // hold that frame back until the full compile finishes) and swaps in when ready
+    let pipeline = await makePipeline(wgsl(false));
+    let fullQueued = still; // reduced motion: one static frame, the light pipeline is all it needs
+    const queueFull = () => {
+      fullQueued = true;
+      device.queue.onSubmittedWorkDone()
+        .then(() => makePipeline(wgsl(true)))
+        .then((p) => { pipeline = p; })
+        .catch(() => {});
+    };
+
+    const uarr = new Float32Array(U_LEN);
     let simT = still ? 11.0 : 0;
     let mx = 0, my = 0, tx = 0, ty = 0; // smoothed / target pointer, drives the camera
     let px = 0, py = 0;                 // raw pointer, drives the floor hit
     let pOn = 0, pOnT = 0;
     let hx = 0, hz = 6;                 // cursor's floor point, lightly smoothed
-    // strum ring buffer: [column, row, startTime, amplitude] × 4
-    const ev = new Float32Array(16);
-    for (let i = 0; i < 4; i++) ev[i * 4 + 2] = -1e3;
-    let evIx = 0;
+    // strum ring buffer: column, row, start time
+    const strums = [0, 1, 2, 3].map(() => ({ cx: 0, cz: 0, t0: -1e3 }));
+    let strumIx = 0;
+
+    // per-string ringing and flash for every live strum → uniform tables
+    const fillTables = () => {
+      for (let i = 0; i < 4; i++) {
+        const s = strums[i];
+        const age = simT - s.t0;
+        const live = age >= 0 && age < 4;
+        uarr[U_EV + i * 4] = s.cx - 3;
+        uarr[U_EV + i * 4 + 1] = s.cz - 3;
+        for (let k = 0; k < 7; k++) {
+          let a = 0, r = 0, fl = 0;
+          if (live) {
+            const d = Math.abs(k - 3);
+            const la = age - d * STRUM_DT;
+            const fall = Math.exp(-((d / STRUM_W) ** 2));
+            a = 0.3 * fall * ring(la, s.cx - 3 + k);
+            r = 0.3 * fall * ring(la, s.cz - 3 + k + 100);
+            fl = la > 0 ? fall * Math.exp(-la * 5) * 0.8 : 0;
+          }
+          uarr[U_CA + i * 8 + k] = a;
+          uarr[U_RA + i * 8 + k] = r;
+          uarr[U_CF + i * 8 + k] = fl;
+          uarr[U_RF + i * 8 + k] = fl;
+        }
+      }
+    };
 
     const dpr = () => Math.min(devicePixelRatio || 1, 2);
+    let shown = false;
     const draw = () => {
       uarr[0] = cv.width; uarr[1] = cv.height;
       uarr[2] = mx; uarr[3] = my;
@@ -272,7 +347,7 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       uarr[6] = dpr();
       uarr[7] = pOn;
       uarr[8] = hx; uarr[9] = hz;
-      uarr.set(ev, 12);
+      fillTables();
       device.queue.writeBuffer(ubuf, 0, uarr);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
@@ -286,6 +361,11 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       pass.draw(3);
       pass.end();
       device.queue.submit([enc.finish()]);
+      if (!shown) {
+        shown = true;
+        cv.classList.add('on');
+        if (!fullQueued) queueFull();
+      }
     };
 
     const fit = () => {
@@ -330,11 +410,9 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       if (Math.abs(nx) > 1 || Math.abs(ny) > 1) return;
       const hit = floorHit(nx, ny);
       if (!hit) return;
-      ev[evIx * 4] = Math.round(hit[0]);
-      ev[evIx * 4 + 1] = Math.round(hit[1]);
-      ev[evIx * 4 + 2] = simT;
-      ev[evIx * 4 + 3] = 1;
-      evIx = (evIx + 1) % 4;
+      const s = strums[strumIx];
+      s.cx = Math.round(hit[0]); s.cz = Math.round(hit[1]); s.t0 = simT;
+      strumIx = (strumIx + 1) % 4;
     });
 
     let raf = 0;
