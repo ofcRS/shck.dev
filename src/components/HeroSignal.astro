@@ -3,7 +3,11 @@
 // perspective grid — grey-white traffic streaks, faint stars — that behaves
 // like a lattice of strings: the camera sways and dollies with the pointer,
 // the lines nearest the cursor part around it, and a click strums the nearby
-// columns and rows. The site's only client JS. Three tiers, all silent: no
+// columns and rows. A click in the sky instead calls down a green lightning
+// bolt on the horizon — vertical, far out, like real lightning, where the
+// click only picks the spot — and a citron pulse rides the struck column in
+// from the distance toward the viewer. The site's only client JS. Three
+// tiers, all silent: no
 // `navigator.gpu` means the plate stays a flat dark ground (the CSS below
 // carries the hero on its own); `prefers-reduced-motion` renders exactly one
 // static frame; otherwise it animates, pausing whenever the plate is
@@ -60,7 +64,7 @@
 
 <script>
   // ---- shader ---------------------------------------------------------------
-  // Uniform layout (floats): see the offsets in draw() — 156 floats, 624 bytes.
+  // Uniform layout (floats): see the offsets in draw() — 1436 floats, 5744 bytes.
   const WGSL_HEAD = /* wgsl */ `
 struct U {
   res    : vec2f,
@@ -70,12 +74,16 @@ struct U {
   dpr    : f32,
   ptrOn  : f32,
   hit    : vec2f,            // cursor's floor point (x, z), from JS floorHit()
-  pad    : vec2f,
+  zapN   : f32,             // live lightnings — the shader loops only this far
+  pad    : f32,
   ev     : array<vec4f, 4>,  // per strum: (first column, first row) of its 7-string window
   ca     : array<vec4f, 8>,  // per strum: column displacements, 8 slots (7 strings + a zero)
   ra     : array<vec4f, 8>,  // per strum: row displacements
   cf     : array<vec4f, 8>,  // per strum: column flashes
   rf     : array<vec4f, 8>,  // per strum: row flashes
+  zc     : array<vec4f, 64>, // per lightning: (column, strike z, pulse head z, pulse brightness)
+  zb     : array<vec4f, 64>, // per lightning: (bolt intensity, bolt width, 0, 0)
+  zn     : array<vec4f, 192>, // per lightning: 6 bolt nodes in aspect NDC, packed (xy, zw)
 };
 @group(0) @binding(0) var<uniform> u : U;
 
@@ -102,6 +110,8 @@ fn streak_color(s : f32, s2 : f32) -> vec3f {
   const WGSL_STUB = /* wgsl */ `
 fn warp(p : vec2f) -> vec2f { return p; }
 fn strum_glow(p : vec2f, gX : f32, gZ : f32) -> f32 { return 0.0; }
+fn zap_line(p : vec2f, gX : f32, wX : f32) -> f32 { return 0.0; }
+fn bolt_glow(sp : vec2f) -> vec2f { return vec2f(0.0); }
 `;
 
   // full pipeline: the lattice as strings. Deliberately no transcendentals inside
@@ -152,6 +162,61 @@ fn strum_glow(p : vec2f, gX : f32, gZ : f32) -> f32 {
   }
   return l;
 }
+
+fn bump2(d2 : f32, r2 : f32) -> f32 { let s = clamp(1.0 - d2 / r2, 0.0, 1.0); return s * s; }
+
+// a lightning strike far out lights its column: a citron pulse travels from the
+// strike point in toward the viewer, and the lines around the impact flash briefly
+fn zap_line(p : vec2f, gX : f32, wX : f32) -> f32 {
+  var l = 0.0;
+  let kx = round(p.x);
+  // where columns go subpixel the crisp line aliases into dashes — fade it out
+  // there and let the smooth neon body carry the distant leg on its own
+  let solid = 1.0 - smoothstep(0.45, 0.85, wX);
+  let n = i32(u.zapN); // dynamic bound: dead slots cost nothing, and nothing unrolls
+  for (var i = 0; i < n; i = i + 1) {
+    let e = u.zc[i];
+    let on = select(0.0, e.w, abs(kx - e.x) < 0.5);
+    let behind = p.y - e.z; // the tail streams back toward the strike point
+    let a = clamp(1.0 - behind / 9.0, 0.0, 1.0) * smoothstep(-0.8, 0.0, behind) * step(p.y, e.y + 0.5);
+    // the line itself, nothing around it — no glow, no floor lights
+    l += gX * on * solid * a * a;
+  }
+  return l;
+}
+
+// squared distance to a segment — the bolt is a 5-segment polyline per event,
+// its nodes computed on the CPU and read here as-is
+fn seg2(sp : vec2f, a : vec2f, b : vec2f) -> f32 {
+  let ab = b - a;
+  let h = clamp(dot(sp - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+  let d = sp - a - ab * h;
+  return dot(d, d);
+}
+
+// screen-space bolt glow: (core, halo)
+fn bolt_glow(sp : vec2f) -> vec2f {
+  var core = 0.0;
+  var halo = 0.0;
+  let n = i32(u.zapN);
+  for (var i = 0; i < n; i = i + 1) {
+    let inten = u.zb[i].x;
+    if (inten <= 0.0) { continue; } // uniform branch — dead slots cost nothing
+    let w = u.zb[i].y;
+    var d2 = 1e9;
+    for (var s = 0; s < 5; s = s + 1) {
+      let va = u.zn[i * 3 + s / 2];
+      let vb = u.zn[i * 3 + (s + 1) / 2];
+      let a = select(va.zw, va.xy, s % 2 == 0);
+      let b = select(vb.zw, vb.xy, (s + 1) % 2 == 0);
+      d2 = min(d2, seg2(sp, a, b));
+    }
+    let ww = w * w;
+    core += inten * bump2(d2, ww);
+    halo += inten * ww * 14.0 / (ww * 14.0 + d2 + 1e-7);
+  }
+  return vec2f(core, halo);
+}
 `;
 
   const WGSL_TAIL = /* wgsl */ `
@@ -197,7 +262,9 @@ fn layer(rd : vec3f, cam : vec3f) -> vec4f {
     streak += streak_color(s, s2) * pow(a, 2.0) * gate;
   }
   streak *= (lm + halo) * fog * vis;
-  streak += vec3f(0.86, 0.88, 0.86) * strum_glow(p, gX, gZ) * fog * vis;
+  streak += vec3f(0.72, 1.0, 0.08) * strum_glow(p, gX, gZ) * fog * vis;
+  // the pulse mostly ignores the fog: an energetic event should out-glow the haze
+  streak += vec3f(0.72, 1.0, 0.08) * zap_line(p, gX, wX) * pow(fog, 0.35) * vis;
   return vec4f(streak, grid);
 }
 
@@ -229,6 +296,17 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
   let skyM = smoothstep(0.03, 0.18, rd.y);
   col += vec3f(0.7, 0.72, 0.75) * star * (0.12 + 0.4 * hash1(hs * 57.0)) * twinkle * skyM;
 
+  // lightning bolt, drawn in screen space over sky and floor alike
+  let bolt = bolt_glow(uv);
+  col += vec3f(0.82, 1.0, 0.58) * bolt.x * 1.35 + vec3f(0.45, 0.85, 0.10) * bolt.y * 0.85;
+  // and the sky itself flickers faintly while a bolt crackles — capped, so
+  // stacked bolts don't wash the whole sky out
+  var liftSum = 0.0;
+  let nz = i32(u.zapN);
+  for (var i = 0; i < nz; i = i + 1) { liftSum += u.zb[i].x; }
+  let lift = min(liftSum, 1.2) * 0.035;
+  col += vec3f(0.42, 0.58, 0.24) * lift * smoothstep(-0.02, 0.14, rd.y);
+
   let q = fc.xy / u.res - 0.5;
   col *= 1.0 - dot(q, q) * 0.35;
   col += (hash1(dot(fc.xy, vec2f(13.17, 7.31))) - 0.5) * 0.008;
@@ -252,7 +330,8 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
   };
 
   // uniform float offsets
-  const U_EV = 12, U_CA = 28, U_RA = 60, U_CF = 92, U_RF = 124, U_LEN = 156;
+  const U_EV = 12, U_CA = 28, U_RA = 60, U_CF = 92, U_RF = 124;
+  const U_ZC = 156, U_ZB = 412, U_ZN = 668, U_LEN = 1436, ZAP_MAX = 64;
 
   const canvas = document.getElementById('sig-c');
 
@@ -310,6 +389,58 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
     // strum ring buffer: column, row, start time
     const strums = [0, 1, 2, 3].map(() => ({ cx: 0, cz: 0, t0: -1e3 }));
     let strumIx = 0;
+    // live lightnings: column, strike z, start time, jitter seed — a list, not
+    // a ring buffer: dead ones leave, and a click only ever evicts the oldest
+    // when all ZAP_MAX uniform slots hold lightnings still alive — the
+    // shader loops only over the live count, so the table is big for free
+    let zaps = [];
+
+    // mirrors the WGSL camera exactly — change both or neither
+    const camPose = (ax = mx, ay = my) => ({
+      pitch: 0.24 + ay * 0.11 * SWAY,
+      yaw: ax * 0.22 * SWAY,
+      camX: ax * 1.1 * DOLLY,
+      camH: 1.7 - ay * 0.4 * DOLLY,
+    });
+    const rayDir = (nx, ny, c) => {
+      let x = nx * (cv.width / cv.height), y = -ny - c.pitch, z = 1.55;
+      const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
+      const cy = Math.cos(c.yaw), sy = Math.sin(c.yaw);
+      return [x * cy + z * sy, y, z * cy - x * sy];
+    };
+    // pointer position → floor (x, z), or null for sky
+    const floorHit = (nx, ny) => {
+      const c = camPose();
+      const [rx, ry, rz] = rayDir(nx, ny, c);
+      if (ry > -0.03) return null;
+      const t = c.camH / -ry;
+      return [c.camX + rx * t, rz * t];
+    };
+    // a sky click strikes deep beyond the horizon — the higher the click, the
+    // deeper — and lands exactly under the click's azimuth: the floor point at
+    // the strike depth projects back to the click's own screen x
+    const skyStrike = (nx, ny) => {
+      // aim with the camera's target pose, not the eased one: the camera is
+      // still settling toward the cursor when the click lands, and the bolt
+      // must stand under the cursor once it does
+      const c = camPose(tx, ty);
+      const [rx, ry, rz] = rayDir(nx, ny, c);
+      const tFar = 40 + Math.min(1, Math.max(0, ry) * 3.5) * 20;
+      // clamp the depth along the ray, not after the fact, so the strike
+      // point still projects exactly onto the click
+      const rzs = Math.max(rz, 0.15);
+      const t2 = Math.max(34, Math.min(60, rzs * tFar)) / rzs;
+      return [c.camX + rx * t2, rzs * t2];
+    };
+    // world floor point → aspect NDC (y up); the exact inverse of rayDir
+    const project = (X, Z) => {
+      const c = camPose();
+      const dx = X - c.camX, dz = Z;
+      const cy = Math.cos(c.yaw), sy = Math.sin(c.yaw);
+      const vx = dx * cy - dz * sy, vz = dx * sy + dz * cy;
+      const k = 1.55 / Math.max(vz, 0.1);
+      return [vx * k, -c.camH * k + c.pitch];
+    };
 
     // per-string ringing and flash for every live strum → uniform tables
     const fillTables = () => {
@@ -337,6 +468,60 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       }
     };
 
+    // the pulse rushes in from the distance and eases up as it nears:
+    // dz/dt = -(6 + 0.35 z), solved in closed form below
+    const ZAP_K = 0.35, ZAP_A = 6 / 0.35;
+    const BOLT_LIFE = 0.45; // how long the bolt itself crackles
+    // bolt flicker, strike flash, and the pulse's approach for every live
+    // lightning → uniform tables; the bolt polyline is rebuilt every frame so
+    // it stays pinned to its strike point while the camera sways
+    const zapHead = (z) =>
+      (z.z0 + ZAP_A) * Math.exp(-ZAP_K * Math.max(0, simT - z.t0 - 0.05)) - ZAP_A;
+    const fillZaps = () => {
+      zaps = zaps.filter((z) => zapHead(z) > -8); // done pulses free their slots
+      for (let i = 0; i < zaps.length; i++) {
+        const z = zaps[i];
+        const age = simT - z.t0;
+        const run = age - 0.05; // the pulse sets out as the bolt connects
+        const head = zapHead(z);
+        let boltI = 0;
+        if (age < BOLT_LIFE) {
+          const gate = hash1(z.seed + Math.floor(age / 0.05) * 7.7) > 0.3 ? 1 : 0.25;
+          boltI = Math.exp(-age * 5.5) * gate;
+        }
+        // thin — the bolt stands far away, and distance is told by width
+        const boltW = 0.0028 + 0.0038 * Math.exp(-age * 8);
+        // the fog thins as the pulse nears, so it brightens on approach by
+        // itself; keep the gain low enough that the line stays citron, not
+        // clamped to white
+        const lineB = run > 0 ? Math.min(1, run * 20) * 2.0 * Math.exp(-run * 0.18) : 0;
+        uarr[U_ZC + i * 4] = z.j;
+        uarr[U_ZC + i * 4 + 1] = z.z0;
+        uarr[U_ZC + i * 4 + 2] = head;
+        uarr[U_ZC + i * 4 + 3] = lineB;
+        uarr[U_ZB + i * 4] = boltI;
+        uarr[U_ZB + i * 4 + 1] = boltW;
+        uarr[U_ZB + i * 4 + 2] = 0;
+        uarr[U_ZB + i * 4 + 3] = 0;
+        if (boltI > 0) {
+          // the bolt stands on the horizon like real lightning: from high above
+          // the frame straight down onto the strike point, zigzagging
+          // horizontally, mid nodes re-jittered every 60ms
+          const [ex, ey] = project(z.j, z.z0);
+          const topX = ex + (hash1(z.seed + 3.1) - 0.5) * 0.1;
+          const topY = 1.12;
+          const shake = Math.floor(age / 0.06) * 51.3;
+          for (let n = 0; n < 6; n++) {
+            const f = n / 5;
+            const amp = 0.04 * Math.sin(Math.PI * f);
+            const jit = (hash1(z.seed + n * 13.7 + shake) - 0.5) * 2;
+            uarr[U_ZN + i * 12 + n * 2] = topX + (ex - topX) * f + amp * jit;
+            uarr[U_ZN + i * 12 + n * 2 + 1] = topY + (ey - topY) * f;
+          }
+        }
+      }
+    };
+
     const dpr = () => Math.min(devicePixelRatio || 1, 2);
     let shown = false;
     const draw = () => {
@@ -347,7 +532,9 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       uarr[6] = dpr();
       uarr[7] = pOn;
       uarr[8] = hx; uarr[9] = hz;
+      uarr[10] = zaps.length;
       fillTables();
+      fillZaps();
       device.queue.writeBuffer(ubuf, 0, uarr);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
@@ -379,24 +566,16 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
 
     if (still) return;
 
-    // mirrors the WGSL camera exactly — pointer position → floor (x, z), or null for sky
-    const floorHit = (nx, ny) => {
-      const pitch = 0.24 + my * 0.11 * SWAY;
-      const yaw = mx * 0.22 * SWAY;
-      const camX = mx * 1.1 * DOLLY, camH = 1.7 - my * 0.4 * DOLLY;
-      let x = nx * (cv.width / cv.height), y = -ny - pitch, z = 1.55;
-      const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
-      const c = Math.cos(yaw), s = Math.sin(yaw);
-      const rx = x * c + z * s, rz = z * c - x * s;
-      if (y > -0.03) return null;
-      const t = camH / -y;
-      return [camX + rx * t, rz * t];
-    };
     const norm = (e) => {
       const r = cv.getBoundingClientRect();
       return [((e.clientX - r.left) / r.width) * 2 - 1, ((e.clientY - r.top) / r.height) * 2 - 1];
     };
 
+    // playing the hero means clicking fast — don't let double-clicks select
+    // the headline; deliberate drag selection still works
+    cv.parentElement?.addEventListener('mousedown', (e) => {
+      if (e.detail > 1) e.preventDefault();
+    });
     addEventListener('pointermove', (e) => {
       const [nx, ny] = norm(e);
       px = nx; py = ny;
@@ -409,10 +588,16 @@ fn fs(@builtin(position) fc : vec4f) -> @location(0) vec4f {
       const [nx, ny] = norm(e);
       if (Math.abs(nx) > 1 || Math.abs(ny) > 1) return;
       const hit = floorHit(nx, ny);
-      if (!hit) return;
-      const s = strums[strumIx];
-      s.cx = Math.round(hit[0]); s.cz = Math.round(hit[1]); s.t0 = simT;
-      strumIx = (strumIx + 1) % 4;
+      if (hit) {
+        const s = strums[strumIx];
+        s.cx = Math.round(hit[0]); s.cz = Math.round(hit[1]); s.t0 = simT;
+        strumIx = (strumIx + 1) % 4;
+      } else {
+        // sky click → a lightning bolt down onto the nearest column, far out
+        const st = skyStrike(nx, ny);
+        zaps.push({ j: Math.round(st[0]), z0: st[1], t0: simT, seed: Math.floor(simT * 63) % 997 });
+        if (zaps.length > ZAP_MAX) zaps.shift();
+      }
     });
 
     let raf = 0;

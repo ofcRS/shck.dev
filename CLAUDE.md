@@ -28,16 +28,33 @@ those were tried and rejected): the camera sways *and* dollies with the pointer 
 consts), the lines nearest the cursor's projected floor point part around it via a domain warp of
 the plane, and a click strums the nearby columns and rows — they ring with per-string pitch in an
 outward sweep and flash briefly as it reaches them (a 4-slot event ring buffer in the uniforms).
-The camera formula exists twice — WGSL and the JS `floorHit()`, which projects the pointer onto the
-floor and feeds `u.hit` — and the two must stay identical, `SWAY`/`DOLLY` included.
+A click in the *sky* (above the horizon) instead calls down a lightning bolt: vertical, standing on
+the horizon far out like real lightning — the click only picks *where* along the horizon (the bolt's
+foot projects exactly onto the click's screen x; `skyStrike()` aims with the camera's *target* pose
+and clamps depth along the ray so the alignment holds) — and a crisp citron pulse then rides the
+struck column in toward the viewer, fast from far and easing near (closed-form `zapHead()`). The
+colour thesis: everything is dark and white, and interaction turns it citron — so the strum flash is
+citron too. The pulse is *only the line*: a neon body, floor glow, and foot glint were all tried and
+rejected as cheap-looking; don't add lights around it. Lightnings live in a JS list (`zaps`), not a
+ring buffer: dead ones leave, up to `ZAP_MAX` (64) can be alive at once, and the shader loops only
+to `u.zapN` — so the table is big for free and nothing gets stolen at human click rates. Bolt
+geometry is a screen-space 5-segment polyline rebuilt on the CPU every frame (`zn`, horizontal
+jitter only, re-seeded every 60 ms) so it stays pinned while the camera sways. Rapid clicks on the
+plate would select the headline — a `mousedown` guard on `e.detail > 1` prevents that.
+The camera formula exists in WGSL and in a JS family that must mirror it exactly, `SWAY`/`DOLLY`
+included: `camPose()`, `rayDir()`, `floorHit()` (pointer → floor point, feeds `u.hit`),
+`skyStrike()` (sky click → strike column and depth), and `project()` (floor point → screen, the
+exact inverse of `rayDir`).
 
 Shader compile time is the hero's real performance constraint, not frame time: the same WGSL
 compiles in 26 ms in Chrome-on-Metal and took 500+ ms in Safari (and reportedly up to a minute on
 some Windows drivers) when the per-string ringing math lived inside unrolled shader loops. Hence two
 rules. First, the per-string physics (`ring()`, falloff, flash) runs on the CPU in `fillTables()`
 and reaches the shader as small uniform tables (`ca`/`ra`/`cf`/`rf`, 8 slots per strum, slot 7
-always zero); the shader loops contain only lookups and polynomial `bump()`s — keep transcendentals
-out of them. Second, startup builds two pipelines from one source: `wgsl(false)` (no strings code,
+always zero; `fillZaps()` does the same for lightning: `zc`/`zb`/`zn`); the shader loops contain
+only lookups and polynomial `bump()`s — keep transcendentals out of them, and prefer loop bounds
+read from a uniform (`u.zapN`) over constants, since a dynamic bound cannot be unrolled and the
+full pipeline then compiles as fast as the stub. Second, startup builds two pipelines from one source: `wgsl(false)` (no strings code,
 paints in tens of ms, fades the canvas in) and `wgsl(true)`, compiled only after that first frame
 has been presented — Safari's GPU process otherwise holds the frame back until the full compile
 finishes — and swapped in when ready. Reduced-motion uses the light pipeline only. The hero text
