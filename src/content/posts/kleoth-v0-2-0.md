@@ -1,105 +1,143 @@
 ---
-title: 'kleoth v0.2.0'
-description: 'Kleoth 0.2.0 — release notes.'
+title: 'Kleoth 0.2.0 — hold a key, talk, get typed text'
+description: 'Kleoth now does system-wide dictation: hold fn+shift, speak, release, and the cleaned-up text lands in whatever app has focus. ElevenLabs Scribe for the ears, one small LLM call for the editing, your own keys, and about a fifth of a cent per utterance.'
 date: 2026-09-03
-tags: ['kleoth', 'release']
+tags: ['kleoth', 'macos', 'swift', 'dictation', 'release']
 tool: 'kleoth'
-draft: true
 ---
 
-**[Kleoth 0.2.0](https://github.com/ofcRS/kleoth/releases/tag/v0.2.0)** is out.
+Kleoth 0.2.0 adds voice typing. Hold **fn+shift** anywhere on your Mac, say what you mean,
+let go, and a second or two later the text is in whatever app has the keyboard focus — the
+Claude prompt box, a Slack message, a commit message in the terminal. Not a transcript of what
+you said: the text you would have typed. It's opt-in, it uses your own ElevenLabs and OpenRouter
+keys, and it's in the DMG at
+[github.com/ofcRS/kleoth/releases/tag/v0.2.0](https://github.com/ofcRS/kleoth/releases/tag/v0.2.0).
 
-## [0.2.0] — 2026-09-03
+## Why build this into a meeting recorder
 
-### Added
+I had been using Wispr Flow for a few weeks and liked the shape of it — a key you hold, a pill
+at the bottom of the screen, text that appears. Two things pushed me out. The free tier is 2,000
+words a week, which I burn through by Tuesday, and the paid tier is $15 a month. And it handles
+my speech badly: half of what I say is Russian with English technical terms in it, and whatever
+model they run kept flattening that to one language or the other.
 
-- **Dictation (hold fn+shift, speak, release).** System-wide voice typing: the utterance is
-  transcribed by ElevenLabs Scribe (`scribe_v2`, `no_verbatim`, your personal-dictionary terms
-  as keyterms), cleaned up by ONE short OpenRouter "polish" call (fillers/self-corrections removed,
-  never translated — falls back to the raw transcript within 8 s if the model is slow, blocked, or
-  changes the language), and pasted into whatever app has keyboard focus via the clipboard + a
-  synthetic ⌘V; your previous clipboard is restored 0.5 s later. Double-tap for hands-free, tap
-  once to stop, Esc cancels. A small dark pill rests half-tucked into a screen edge (bottom by
-  default; drag it along the edge, or toward another edge to dock it there — side edges stand it
-  up) and springs out while you speak: a live waveform while listening, a travelling wave while
-  transcribing and polishing, a check when the text has landed, words only for warnings and
-  errors. Silence just puts it back. Text-only history lands in `~/Kleoth/dictations/<day>.json` and is
-  browsable from the new **Dictations** scope in the History window; a personal dictionary lives
-  in `~/.config/kleoth/dictionary.json` (Settings → Dictation). Audio is never kept. Opt-in
-  (Settings → Dictation) and requires the **Accessibility** permission (for the hotkey and the
-  paste); `dictate` is a headless CLI probe for the pipeline.
-- **Polish adapts to where you're typing.** In composition surfaces — AI chats (Claude, ChatGPT,
-  Cursor…), editors, notes, documents, mail, browsers — the polish step restructures spoken
-  brainstorming into the text you would have typed: ideas reordered, fragments merged, spoken
-  lists rendered as lists, the word you settled on kept, thinking-out-loud dropped, every point
-  preserved and nothing invented. Messaging apps get a light touch that keeps your sentence order
-  and voice; terminals get plain single-line text. The spoken language is always kept, including
-  Russian sentences with English technical terms.
+Kleoth already had the pieces. It talks to ElevenLabs Scribe for cloud transcription of
+meetings, and to OpenRouter for summaries, with keys stored in the Keychain. Scribe v2 is the
+best speech model I've used for code-switching, and it bills per second of audio. A twenty-second
+utterance costs about a tenth of a cent there, plus a smaller fraction for the editing call. My
+first morning of heavy use came to a few cents. I pay for what I use, and nothing in the loop is
+somebody else's subscription.
 
-- **Choose the engine per meeting.** An untranscribed recording's detail pane now offers
-  both **Transcribe** (free, on-device) and **Transcribe in cloud** (ElevenLabs Scribe, your
-  key) side by side.
-- **Per-tier transcript variants.** Re-transcribing a meeting with the other engine keeps the
-  previous transcript + summary as a variant instead of overwriting it — switch between the
-  On-device and Cloud versions from the tier badge in the meeting detail view.
-- **Folder sizes.** Meeting rows, the detail view, and multi-selection now show each meeting's
-  size on disk, and Settings totals your `~/Kleoth` footprint.
-- **Remove Transcription.** Revert a meeting to its saved audio — the transcript, summary, and
-  any variants move to the Trash (recoverable) while the recording, title, and speaker names
-  stay, ready to re-transcribe. Available from the History context menu (multi-select works)
-  and the detail toolbar.
-- **Failed runs now explain themselves where you're looking.** When a transcription or
-  summarization fails (e.g. an ElevenLabs payment/quota issue), the meeting keeps a visible
-  record of it: a dismissible error card in the meeting detail view and a red "Failed" chip on
-  its History row (hover for the message). Previously the error appeared only in the menu-bar
-  popover's status line, so from the History window a failed cloud transcription just silently
-  reverted to *Untranscribed*. Retrying, dismissing, or trashing the meeting clears it.
+## What happens between key-down and paste
 
-### Changed
+The chord is watched with global `NSEvent` monitors, which is what the Accessibility permission
+is for. A pure state machine decides what a press means: a tap under 300 ms is ignored (that's
+you reaching for an arrow key), a hold is push-to-talk, and a double-tap latches hands-free
+until you tap again. The microphone is opened at key-down, before the pill even appears, so the
+first syllable isn't lost.
 
-- **Default summary model is now `z-ai/glm-5.3-flash`** (was the retired
-  `google/gemini-3-flash-preview`). The dictation polish model defaults to
-  `google/gemini-3.5-flash-lite` (median ~0.9 s per dictation in live measurements, vs 3–4 s on
-  GLM) and falls through to `z-ai/glm-5.3-flash` when the primary is unreachable. A stored
-  retired slug is migrated in memory on every launch and rewritten in the Keychain the first time
-  Settings opens. Why not Gemini: accounts whose OpenRouter privacy settings enforce Zero Data
-  Retention find every `google/*` model blocked (404 `zdr-violation-by-account`), while GLM works
-  under both the no-train and ZDR guardrails. `google/gemini-3.8-flash` remains selectable in the
-  picker — relax the guardrail at openrouter.ai/settings/privacy to use it.
-- Cloud transcription (Scribe) requests for dictation send `no_verbatim=true` (fillers dropped
-  server-side); meeting transcription is unchanged.
-- **Transcription after recording is now opt-in.** Stopping a recording saves the audio and
-  lists it as *Untranscribed*; transcription starts only when you choose an engine on the
-  meeting (or turn on "Transcribe automatically after recording" in Settings). This applies to
-  existing installs too — flip the new toggle to restore the old always-transcribe behavior.
+On release the clip is mixed to mono, loudness-normalized, encoded at 64 kbps, and sent to
+Scribe v2 with `no_verbatim` (it drops fillers server-side) and up to a hundred terms from a
+personal dictionary as `keyterms` — the names and jargon it would otherwise mishear. The raw
+transcript then goes through **one** OpenRouter call with a strict JSON schema, on
+`google/gemini-3.5-flash-lite` by default, which comes back in about a second. Then a
+pasteboard write and a synthetic ⌘V, and your previous clipboard is put back half a second
+later. If the editing call is slow, blocked, or answers in the wrong language, the raw
+transcript is pasted instead within eight seconds, with an orange note on the pill. Text always
+lands.
 
-### Fixed
+Nothing is kept except text. Each day's dictations go into `~/Kleoth/dictations/<day>.json`
+and show up under a **Dictations** scope in the History window; the audio clip is deleted the
+moment the pipeline is done with it.
 
-- **Playback now plays both sides in both ears.** The built-in player live-downmixes the
-  2-channel meeting file (your mic on the left, the other side on the right), so you no longer
-  hear yourself only in the left ear. The file on disk keeps its channel layout.
-- Over-amplified microphone peaks are now clamped during loudness normalization, preventing
-  hard clipping in future recordings' combined audio.
-- Summaries are no longer silently truncated: completions cut off at the output
-  cap (`finish_reason == "length"`) are retried with a larger budget and a
-  truncated result is surfaced as a failure rather than shipped half-empty.
-- The onboarding "Start your first recording" button no longer no-ops after
-  "Skip setup" — it routes to the permissions step so consent is acknowledged.
+## The editing depends on where you're typing
 
-### Removed
+This is the part I care about most. I'm not a native English speaker, and when I dictate a
+prompt for an AI assistant I'm thinking out loud: I restart sentences, I hunt for a word ("the
+approach, no, the strategy"), I remember the important thing last. A transcript of that is
+faithful and useless.
 
-- **Slack integration.** The Slack webhook export is gone — the `kleoth slack`
-  CLI subcommand, the Settings webhook field, the "Post to Slack" Shortcut /
-  App Intent, the `kleoth://slack-latest` URL verb, and the detail view's "Copy
-  for Slack" action (replaced by a Slack-free **Copy Summary** that copies the
-  rendered Markdown).
+So the editing call is told what app the text is going into, and picks one of three modes:
 
+- **compose** — AI chats, editors, notes, documents, mail, browsers: reorder the points, merge
+  the fragments, render "first… second… and also…" as a list, keep the word I settled on,
+  drop the thinking-out-loud. Every substantive point is kept, a "maybe" stays a "maybe", and
+  nothing is invented.
+- **chat** — Slack, Telegram, Messages, Discord: fillers and punctuation only. Sentence order
+  and voice untouched, because a restructured chat message reads like it came from someone else.
+- **terminal** — plain text, one line, and a spoken description of a command stays a
+  description. It never turns "run the tests" into a command.
 
-### Install
+Here is a real one, said into Claude:
 
-Download the DMG, drag Kleoth to Applications, then **right-click → Open** on first launch (the build is self-signed, not notarized).
+> okay so um I want to I want you to look at the the recording controller because it's it's
+> too big like it does everything um the the capture, the pipeline, the the list of meetings,
+> everything. and I'm thinking maybe we should uh we should split it, no not split, extract,
+> extract the the queue part, the pipeline queue, into its own, its own type. um also, wait,
+> before that, actually first, we need tests for it because right now there is no tests for the
+> app package at all […] don't do it yet, just just propose the plan, like how you would do it,
+> and what what risks you see.
 
-SHA-256: `46544836789b46c046d97ecb41d6b7cd5212f05eb83153b64ae49f1bc5b46e2e`
+And what got pasted:
 
+> Look at the recording controller because it is too big and does everything: the capture, the
+> pipeline, the list of meetings, and more.
+>
+> 1. Add tests first, because right now there are no tests for the app package at all, so if
+>    we change something we won't know if we broke it.
+> 2. Extract the queue part, the pipeline queue, into its own type.
+> 3. Move the meeting errors dictionary together with the queue because it shares the same
+>    responsibility.
+>
+> Don't do it yet — just propose the plan and what risks you see.
 
-<!-- draft: edit me, set draft: false, merge to publish -->
+The same sentence said into Slack comes out as one casual line. Russian stays Russian, and a
+Russian sentence with `pipeline queue` and `MainActor` in it stays exactly that mixed. I
+benchmarked six of these rambles across eight models before settling on the default; the lite
+Gemini was the fastest and, to my surprise, the most faithful. Claude Haiku 4.5 was as good and
+twice as slow. A couple of models timed out or truncated under the strict schema and are not
+offered.
+
+## The pill
+
+Between dictations a small dark tab rests half off the bottom edge of the screen. Hold the chord
+and it springs out into a bar with a live waveform; release and the bars carry a wave while it
+transcribes and edits, then a check, then it sinks back. No words in any of that — words only
+appear for a warning or an error, because those need a reason and sometimes a button.
+
+You can drag it along its edge, or drag it clearly toward another edge and it docks there; on
+a side edge it stands up and everything, waveform included, runs vertically. The animation
+itself was the hardest bit of UI in the release. Animating an `NSWindow`'s frame with AppKit's
+animator while SwiftUI animates the content inside it gives you two clocks and two curves
+fighting, and it looked like it. The window is never animated now: on each move it is set,
+instantly, to a transparent stage covering both the start and the end rect, one SwiftUI spring
+carries the capsule's offset, size and rotation, and when the spring settles the window shrinks
+back to the capsule. A second spring, staggered by ninety milliseconds, handles the shape
+change, with a quick squash-and-stretch as anticipation. It reads as one elastic motion.
+
+## Also in 0.2.0
+
+- **Transcribing a meeting after recording is now opt-in.** Stopping saves the audio and lists
+  it as *Untranscribed*; you pick the engine per meeting, on-device or cloud, when you want it.
+- **Per-engine transcript variants.** Re-transcribing with the other engine keeps the previous
+  transcript and summary; switch between them from the tier badge.
+- **Remove Transcription** reverts a meeting to its audio (transcript and summary go to the
+  Trash), and rows now show their size on disk.
+- **Playback plays both sides in both ears** — the two-channel file is downmixed live instead of
+  giving you yourself in the left ear.
+- **Failures are visible where you're looking**: an error card on the meeting and a red chip on
+  its row, instead of a line in the menu-bar popover you'd never see.
+- The Slack integration is gone; Copy Summary replaces it.
+
+## Rough edges
+
+- Dictation needs the **Accessibility** permission, for the hotkey and for the paste. Kleoth is
+  deliberately not sandboxed — the sandbox blocks posting the synthetic ⌘V outright, so there is
+  no Mac App Store path for this feature.
+- The paste is a synthetic ⌘V on the `V` key's QWERTY position. Russian and other QWERTY-family
+  layouts work; Dvorak and Colemak are not handled yet.
+- It is not free: a few tenths of a cent per utterance across two providers, on your keys.
+- Still self-signed, still right-click → Open on first launch.
+
+Download: [github.com/ofcRS/kleoth/releases/tag/v0.2.0](https://github.com/ofcRS/kleoth/releases/tag/v0.2.0).
+Full notes in the [changelog](/changelog).
